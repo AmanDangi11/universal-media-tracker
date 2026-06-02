@@ -253,42 +253,59 @@ export default function Home() {
         if (Array.isArray(data)) {
           setMediaList(data);
 
-          // Proactively fetch real-time airing schedules from AniList for ongoing anime/manga!
+          // Proactively fetch real-time airing schedules for ongoing anime/manga!
           const ongoingAnimeOrManga = data.filter(
-            (item) => item.currentProgress < item.totalProgress && (item.type === "ANIME" || item.type === "MANGA")
+            (item) => item.currentProgress < item.totalProgress && (item.type === "ANIME" || item.type === "MANGA" || item.type === "LIGHT_NOVEL")
           );
 
           if (ongoingAnimeOrManga.length > 0) {
             const updatedItems = await Promise.all(
               data.map(async (item) => {
-                if (item.currentProgress < item.totalProgress && (item.type === "ANIME" || item.type === "MANGA")) {
-                  try {
-                    const query = `
-                      query ($search: String, $type: MediaType) {
-                        Media (search: $search, type: $type) {
-                          nextAiringEpisode {
-                            airingAt
-                            timeUntilAiring
-                            episode
+                if (item.currentProgress < item.totalProgress) {
+                  if (item.type === "ANIME") {
+                    try {
+                      const query = `
+                        query ($search: String) {
+                          Media (search: $search, type: ANIME) {
+                            nextAiringEpisode {
+                              airingAt
+                              timeUntilAiring
+                              episode
+                            }
                           }
                         }
+                      `;
+                      const res = await fetch("https://graphql.anilist.co", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          query,
+                          variables: { search: item.title }
+                        })
+                      });
+                      const json = await res.json();
+                      const nextAiringEpisode = json?.data?.Media?.nextAiringEpisode;
+                      if (nextAiringEpisode) {
+                        return { ...item, nextAiringEpisode };
                       }
-                    `;
-                    const res = await fetch("https://graphql.anilist.co", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        query,
-                        variables: { search: item.title, type: item.type === "ANIME" ? "ANIME" : "MANGA" }
-                      })
-                    });
-                    const json = await res.json();
-                    const nextAiringEpisode = json?.data?.Media?.nextAiringEpisode;
-                    if (nextAiringEpisode) {
-                      return { ...item, nextAiringEpisode };
+                    } catch (err) {
+                      console.error("Failed to fetch live airing info for anime:", item.title, err);
                     }
-                  } catch (err) {
-                    console.error("Failed to fetch live airing info for:", item.title, err);
+                  } else if (item.type === "MANGA" || item.type === "LIGHT_NOVEL") {
+                    try {
+                      const res = await fetch(`${getApiBaseUrl()}/api/manga/airing?title=${encodeURIComponent(item.title)}`);
+                      if (res.ok) {
+                        const mangaData = await res.json();
+                        const updatedTotal = Math.max(item.totalProgress, Math.floor(mangaData.latestChapter));
+                        return {
+                          ...item,
+                          totalProgress: updatedTotal,
+                          nextAiringEpisode: mangaData.nextAiringEpisode
+                        };
+                      }
+                    } catch (err) {
+                      console.error("Failed to fetch live airing info for manga:", item.title, err);
+                    }
                   }
                 }
                 return item;
@@ -403,11 +420,15 @@ export default function Home() {
         const timeLabel = date.toLocaleDateString([], { weekday: 'short' }) + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
         
         const daysLeft = Math.ceil(item.nextAiringEpisode.timeUntilAiring / 3600 / 24);
-        let details = `Episode ${item.nextAiringEpisode.episode} airs in ${daysLeft} days`;
+        const noun = (item.type === "ANIME" || item.type === "TV_SHOW") ? "Episode" : "Chapter";
+        const actionVerb = (item.type === "ANIME" || item.type === "TV_SHOW") ? "airs" : "releases";
+        const actionGerund = (item.type === "ANIME" || item.type === "TV_SHOW") ? "airing" : "releasing";
+        
+        let details = `${noun} ${item.nextAiringEpisode.episode} ${actionVerb} in ${daysLeft} days`;
         if (daysLeft <= 0) {
-          details = `Episode ${item.nextAiringEpisode.episode} is airing now/soon!`;
+          details = `${noun} ${item.nextAiringEpisode.episode} is ${actionGerund} now/soon!`;
         } else if (daysLeft === 1) {
-          details = `Episode ${item.nextAiringEpisode.episode} airs tomorrow!`;
+          details = `${noun} ${item.nextAiringEpisode.episode} ${actionVerb} tomorrow!`;
         }
 
         calendarEntries.push({

@@ -290,13 +290,14 @@ app.post('/api/watchlist/update', authenticateToken, async (req: AuthenticatedRe
     }
 
     const media = progress.media;
-    const maxVal = media.totalEpisodes || media.totalChapters || 12;
+    const isOngoingManga = (media.type === 'MANGA' || media.type === 'LIGHT_NOVEL') && media.status === 'RELEASING';
+    const maxVal = isOngoingManga ? 99999 : (media.totalEpisodes || media.totalChapters || 12);
     let nextVal = progress.currentProgress;
 
     if (type === 'increment') {
       nextVal = Math.min(maxVal, progress.currentProgress + 1);
     } else if (type === 'catchup') {
-      nextVal = maxVal;
+      nextVal = maxVal === 99999 ? progress.currentProgress : maxVal; // Catch up has no effect if limit is unbounded
     } else if (type === 'reset') {
       nextVal = 0;
     } else if (type === 'custom') {
@@ -315,6 +316,16 @@ app.post('/api/watchlist/update', authenticateToken, async (req: AuthenticatedRe
         status: nextVal === maxVal ? 'COMPLETED' : 'CURRENT'
       }
     });
+
+    // If it's an ongoing manga and their progress exceeds the saved total chapters, dynamically update the media record
+    if (isOngoingManga && nextVal > (media.totalChapters || 0)) {
+      await prisma.media.update({
+        where: { id: media.id },
+        data: { totalChapters: nextVal }
+      });
+      // Update our local media object for clean response mapping
+      media.totalChapters = nextVal;
+    }
 
     // Record analytics progress history in database
     await prisma.progressHistory.create({
@@ -454,6 +465,71 @@ app.get('/api/search', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error executing search API:', error);
     return res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// Real-time Manga Release & Chapter Tracker Gateway (using MangaDex)
+app.get('/api/manga/airing', async (req: Request, res: Response) => {
+  try {
+    const title = req.query.title as string || '';
+    if (!title) {
+      return res.status(400).json({ error: 'Manga title is required' });
+    }
+
+    // 1. Search MangaDex for the manga title
+    const searchUrl = `https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=1`;
+    const searchResponse = await axios.get(searchUrl, { timeout: 5000 });
+    const mangaList = searchResponse.data?.data || [];
+
+    if (mangaList.length === 0) {
+      return res.json({ latestChapter: 150, nextAiringEpisode: null });
+    }
+
+    const mangaId = mangaList[0].id;
+
+    // 2. Fetch the latest English chapters for this manga
+    const feedUrl = `https://api.mangadex.org/manga/${mangaId}/feed?limit=5&order[chapter]=desc&translatedLanguage[]=en`;
+    const feedResponse = await axios.get(feedUrl, { timeout: 5000 });
+    const chapters = feedResponse.data?.data || [];
+
+    if (chapters.length === 0) {
+      return res.json({ latestChapter: 150, nextAiringEpisode: null });
+    }
+
+    // Find the first chapter object that has a valid chapter number
+    const latestChapterObj = chapters.find((ch: any) => ch.attributes?.chapter !== null);
+    if (!latestChapterObj) {
+      return res.json({ latestChapter: 150, nextAiringEpisode: null });
+    }
+
+    const chapterNumStr = latestChapterObj.attributes.chapter;
+    const latestChapter = parseFloat(chapterNumStr) || 150;
+    const publishAtStr = latestChapterObj.attributes.publishAt || latestChapterObj.attributes.createdAt;
+
+    let nextAiringEpisode = null;
+    if (publishAtStr) {
+      const lastPublishTime = new Date(publishAtStr).getTime();
+      // Estimate the next weekly chapter (7 days later)
+      const nextAiringTimeMs = lastPublishTime + 7 * 24 * 60 * 60 * 1000;
+      const airingAt = Math.floor(nextAiringTimeMs / 1000);
+      const timeUntilAiring = airingAt - Math.floor(Date.now() / 1000);
+      const nextEpisodeNum = Math.floor(latestChapter) + 1;
+
+      nextAiringEpisode = {
+        airingAt,
+        timeUntilAiring,
+        episode: nextEpisodeNum
+      };
+    }
+
+    return res.json({
+      latestChapter,
+      nextAiringEpisode
+    });
+  } catch (error) {
+    console.error('Error fetching MangaDex airing/chapter details:', error instanceof Error ? error.message : error);
+    // Graceful fallback
+    return res.json({ latestChapter: 150, nextAiringEpisode: null });
   }
 });
 
