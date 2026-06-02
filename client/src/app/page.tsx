@@ -747,7 +747,8 @@ export default function Home() {
           synopsis: result.synopsis,
           totalProgress: result.totalProgress,
           progressType: result.progressType,
-          franchise: result.franchise
+          franchise: result.franchise,
+          externalId: result.id
         })
       })
         .then((res) => {
