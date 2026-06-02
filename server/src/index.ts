@@ -436,18 +436,74 @@ app.get('/api/search', async (req: Request, res: Response) => {
       const response = await axios.get(url);
       const results = response.data?.results || [];
 
-      const mapped = results.slice(0, 10).map((item: any) => ({
-        id: `tmdb-${item.id}`,
-        type: isTv ? 'TV_SHOW' : 'MOVIE',
-        title: isTv ? item.name : item.title,
-        franchise: `${isTv ? item.name : item.title} Franchise`,
-        coverImage: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
-        synopsis: item.overview || 'No synopsis available.',
-        totalProgress: isTv ? 10 : 1,
-        progressType: 'episode'
-      }));
+      if (isTv) {
+        const topShows = results.slice(0, 2);
+        const remainingShows = results.slice(2, 6);
+        const expandedResults: any[] = [];
 
-      return res.json(mapped);
+        await Promise.all(topShows.map(async (item: any) => {
+          // 1. Add main entry (All Seasons)
+          expandedResults.push({
+            id: `tmdb-${item.id}`,
+            type: 'TV_SHOW' as const,
+            title: `${item.name} (All Seasons)`,
+            franchise: `${item.name} Franchise`,
+            coverImage: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+            synopsis: item.overview || 'No synopsis available.',
+            totalProgress: 10,
+            progressType: 'episode'
+          });
+
+          // 2. Fetch and add individual seasons
+          try {
+            const detailsUrl = `https://api.themoviedb.org/3/tv/${item.id}?api_key=${apiKey}&language=en-US`;
+            const detailsRes = await axios.get(detailsUrl, { timeout: 3000 });
+            const seasons = detailsRes.data?.seasons || [];
+
+            seasons.forEach((season: any) => {
+              if (season.season_number > 0 && season.episode_count > 0) {
+                expandedResults.push({
+                  id: `tmdb-season-${season.id}`,
+                  type: 'TV_SHOW' as const,
+                  title: `${item.name} - Season ${season.season_number}`,
+                  franchise: `${item.name} Franchise`,
+                  coverImage: season.poster_path ? `https://image.tmdb.org/t/p/w500${season.poster_path}` : (item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60'),
+                  synopsis: season.overview || `Season ${season.season_number} of ${item.name}. Contains ${season.episode_count} episodes.`,
+                  totalProgress: season.episode_count,
+                  progressType: 'episode'
+                });
+              }
+            });
+          } catch (err) {
+            console.error(`Failed to fetch TMDB TV show details for seasons:`, err);
+          }
+        }));
+
+        const mappedRemaining = remainingShows.map((item: any) => ({
+          id: `tmdb-${item.id}`,
+          type: 'TV_SHOW' as const,
+          title: item.name,
+          franchise: `${item.name} Franchise`,
+          coverImage: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+          synopsis: item.overview || 'No synopsis available.',
+          totalProgress: 10,
+          progressType: 'episode'
+        }));
+
+        return res.json([...expandedResults, ...mappedRemaining]);
+      } else {
+        const mapped = results.slice(0, 10).map((item: any) => ({
+          id: `tmdb-${item.id}`,
+          type: 'MOVIE' as const,
+          title: item.title,
+          franchise: `${item.title} Franchise`,
+          coverImage: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+          synopsis: item.overview || 'No synopsis available.',
+          totalProgress: 1,
+          progressType: 'episode'
+        }));
+        return res.json(mapped);
+      }
     }
 
     // 2. Otherwise, use 100% free, dynamic keyless APIs (TVmaze for TV shows, YTS for movies)
@@ -460,7 +516,50 @@ app.get('/api/search', async (req: Request, res: Response) => {
         const tvResponse = await axios.get(tvmazeUrl);
         const tvShows = tvResponse.data || [];
         
-        const mappedTv = tvShows.slice(0, 8).map((item: any) => {
+        const topShows = tvShows.slice(0, 2);
+        const remainingShows = tvShows.slice(2, 6);
+        const expandedResults: any[] = [];
+
+        await Promise.all(topShows.map(async (item: any) => {
+          const show = item.show || {};
+          // 1. Add the main show entry
+          expandedResults.push({
+            id: `tvmaze-${show.id}`,
+            type: 'TV_SHOW' as const,
+            title: `${show.name} (All Seasons)`,
+            franchise: `${show.name} Franchise`,
+            coverImage: show.image?.medium || show.image?.original || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+            synopsis: show.summary ? show.summary.replace(/<[^>]*>/g, "") : 'No synopsis available.',
+            totalProgress: 12,
+            progressType: 'episode' as const
+          });
+
+          // 2. Fetch and add individual seasons
+          try {
+            const seasonsUrl = `https://api.tvmaze.com/shows/${show.id}/seasons`;
+            const seasonsResponse = await axios.get(seasonsUrl, { timeout: 3000 });
+            const seasons = seasonsResponse.data || [];
+            
+            seasons.forEach((season: any) => {
+              if (season.episodeOrder && season.episodeOrder > 0) {
+                expandedResults.push({
+                  id: `tvmaze-season-${season.id}`,
+                  type: 'TV_SHOW' as const,
+                  title: `${show.name} - Season ${season.number}`,
+                  franchise: `${show.name} Franchise`,
+                  coverImage: season.image?.medium || show.image?.medium || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+                  synopsis: `Season ${season.number} of ${show.name}. Contains ${season.episodeOrder} episodes.`,
+                  totalProgress: season.episodeOrder,
+                  progressType: 'episode' as const
+                });
+              }
+            });
+          } catch (err) {
+            console.error(`Failed to fetch seasons for TVmaze show ${show.id}:`, err);
+          }
+        }));
+
+        const mappedRemaining = remainingShows.map((item: any) => {
           const show = item.show || {};
           return {
             id: `tvmaze-${show.id}`,
@@ -469,12 +568,12 @@ app.get('/api/search', async (req: Request, res: Response) => {
             franchise: `${show.name || 'Unknown'} Franchise`,
             coverImage: show.image?.medium || show.image?.original || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
             synopsis: show.summary ? show.summary.replace(/<[^>]*>/g, "") : 'No synopsis available.',
-            totalProgress: 12, // standard seasonal progress default
+            totalProgress: 12,
             progressType: 'episode' as const
           };
         });
-        
-        dynamicResults = [...dynamicResults, ...mappedTv];
+
+        dynamicResults = [...dynamicResults, ...expandedResults, ...mappedRemaining];
       } catch (err) {
         console.error("TVmaze API fetch failed:", err);
       }
