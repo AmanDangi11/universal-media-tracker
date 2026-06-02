@@ -1,0 +1,182 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum MediaType {
+  ANIME
+  MANGA
+  LIGHT_NOVEL
+  MOVIE
+  TV_SHOW
+}
+
+enum MediaStatus {
+  FINISHED
+  RELEASING
+  NOT_YET_RELEASED
+  CANCELLED
+}
+
+enum TrackingStatus {
+  CURRENT      // Watching / Reading
+  PLANNING     // Plan to Watch / Plan to Read
+  COMPLETED
+  ON_HOLD
+  DROPPED
+}
+
+enum RelationType {
+  ADAPTATION
+  PREQUEL
+  SEQUEL
+  SPIN_OFF
+  SIDE_STORY
+  ALTERNATIVE_VERSION
+  OTHER
+}
+
+model User {
+  id            String               @id @default(uuid())
+  email         String               @unique
+  username      String               @unique
+  passwordHash  String
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  
+  // Relations
+  progressList  UserMediaProgress[]
+  apiKeys       UserApiKey[]
+}
+
+model Media {
+  id              String         @id @default(uuid())
+  type            MediaType
+  titleRomaji     String?
+  titleEnglish    String
+  titleNative     String?
+  synopsis        String?        @db.Text
+  coverImage      String?        // URL to cloud storage or external source
+  bannerImage     String?        // URL
+  status          MediaStatus    @default(NOT_YET_RELEASED)
+  startDate       DateTime?
+  endDate         DateTime?
+  
+  // Media Type Specific Attributes (Nullable to support unified storage)
+  totalEpisodes   Int?           // For Anime / TV_SHOW
+  totalChapters   Int?           // For Manga / Light Novel
+  totalVolumes    Int?           // For Manga / Light Novel
+  runtime         Int?           // In minutes, for MOVIE
+  
+  // External Provider Mappings
+  anilistId       Int?           @unique
+  malId           Int?           @unique
+  tmdbId          Int?           @unique
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  progressRecords UserMediaProgress[]
+  groupItems      MediaGroupItem[]
+
+  @@index([type])
+  @@index([titleEnglish])
+}
+
+model MediaGroup {
+  id          String           @id @default(uuid())
+  name        String           // e.g., "Demon Slayer Franchise"
+  description String?          @db.Text
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  items       MediaGroupItem[]
+}
+
+model MediaGroupItem {
+  id           String       @id @default(uuid())
+  groupId      String
+  mediaId      String
+  relationType RelationType @default(OTHER)
+
+  // Relations
+  group        MediaGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  media        Media        @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, mediaId])
+}
+
+model UserMediaProgress {
+  id              String           @id @default(uuid())
+  userId          String
+  mediaId         String
+  status          TrackingStatus   @default(PLANNING)
+  
+  // Tracking Progress
+  currentProgress Int              @default(0)   // Episode number or Chapter number
+  currentVolume   Int?             @default(0)   // Optional volume tracking for Books
+  
+  rating          Float?           // Personal score (e.g., 1-10 or 1-100)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media           Media            @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  history         ProgressHistory[]
+
+  @@unique([userId, mediaId])
+  @@index([status])
+}
+
+model ProgressHistory {
+  id             String            @id @default(uuid())
+  progressId     String
+  progressValue  Int               // The episode/chapter number recorded at this step
+  volumeValue    Int?              // Optional volume number
+  timestamp      DateTime          @default(now())
+  
+  // Rich context notes & Visual bookmarks
+  note           String?           @db.Text
+  visualBookmark String?           // URL to a screenshot or image reference
+  
+  // Analytics metadata
+  watchDuration  Int?              // Watch duration in seconds (if parsed from webhook)
+  deviceAgent    String?           // Browser / extension / device info
+
+  // Relations
+  progressRecord UserMediaProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
+
+  @@index([progressId])
+  @@index([timestamp])
+}
+
+model UserApiKey {
+  id          String    @id @default(uuid())
+  userId      String
+  keyHash     String    @unique
+  name        String    // e.g., "Chrome Extension - Desktop"
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+
+  // Relations
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ApiCache {
+  key       String   @id // e.g., "anilist:anime:101922" or "tmdb:movie:550"
+  value     Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}

@@ -1,0 +1,8 @@
+{
+  "appId": "com.universalmediatracker.app",
+  "appName": "Universal Media Tracker",
+  "webDir": "out",
+  "server": {
+    "androidScheme": "https"
+  }
+}
