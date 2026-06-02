@@ -178,6 +178,9 @@ interface AiringSchedule {
 }
 
 const getApiBaseUrl = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
   if (typeof window !== "undefined") {
     if (window.location.hostname === "14df525de8d485.lhr.life" || window.location.hostname === "3369ccf4201b95.lhr.life") {
       return "https://ad35b38df0678b.lhr.life";
