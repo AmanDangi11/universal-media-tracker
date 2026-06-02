@@ -395,6 +395,32 @@ export default function Home() {
     setMediaList([]);
   };
 
+  // Calculate watch and read hours
+  const calculateAnalytics = () => {
+    let watchMinutes = 0;
+    let readMinutes = 0;
+
+    mediaList.forEach((item) => {
+      const progress = item.currentProgress || 0;
+      if (item.type === "ANIME") {
+        watchMinutes += progress * 24;
+      } else if (item.type === "TV_SHOW") {
+        watchMinutes += progress * 45;
+      } else if (item.type === "MOVIE") {
+        watchMinutes += progress * 120;
+      } else if (item.type === "MANGA" || item.type === "LIGHT_NOVEL") {
+        readMinutes += progress * 10;
+      }
+    });
+
+    const watchHours = parseFloat((watchMinutes / 60).toFixed(1));
+    const readHours = parseFloat((readMinutes / 60).toFixed(1));
+
+    return { watchHours, readHours };
+  };
+
+  const { watchHours: totalWatchHours, readHours: totalReadHours } = calculateAnalytics();
+
   // Fetch backend server health check on startup
   useEffect(() => {
     fetch(`${getApiBaseUrl()}/health`)
@@ -1542,6 +1568,28 @@ export default function Home() {
             <p className="text-[9px] text-slate-500 mt-0.5 font-medium">Watchlist sync state and visual clustering stats</p>
           </div>
 
+          {/* Watch & Read Analytics Card (Mobile) */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md">
+            <div className="flex items-center gap-2 text-indigo-400 mb-3">
+              <TrendingUp className="w-4.5 h-4.5" />
+              <h4 className="text-xs font-bold uppercase tracking-wider">Your Analytics</h4>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="bg-slate-950/40 p-2.5 border border-slate-800/80 rounded-xl text-center">
+                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Watch Time</p>
+                <p className="text-base font-extrabold text-indigo-300 mt-0.5">{totalWatchHours} hrs</p>
+              </div>
+              <div className="bg-slate-950/40 p-2.5 border border-slate-800/80 rounded-xl text-center">
+                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Read Time</p>
+                <p className="text-base font-extrabold text-emerald-300 mt-0.5">{totalReadHours} hrs</p>
+              </div>
+            </div>
+            <div className="bg-indigo-950/20 p-2.5 border border-indigo-500/10 rounded-xl flex items-center justify-between text-xs">
+              <span className="text-slate-400 font-medium">Total Time Spent</span>
+              <span className="font-bold text-indigo-400">{(totalWatchHours + totalReadHours).toFixed(1)} hrs</span>
+            </div>
+          </div>
+
           {/* Sync Connection Status */}
           <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1611,6 +1659,28 @@ export default function Home() {
         {/* SIDE PANEL (Order-2: Pushed cleanly below the watchlist on mobile viewports) */}
         <aside className="hidden lg:flex lg:col-span-1 flex-col gap-6 order-2 lg:order-1">
           
+          {/* Watch & Read Analytics Card */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 backdrop-blur-sm">
+            <div className="flex items-center gap-2 text-indigo-400 mb-3.5">
+              <TrendingUp className="w-5 h-5" />
+              <h2 className="text-sm font-semibold uppercase tracking-wider">Your Analytics</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-slate-950/40 p-3 border border-slate-800/80 rounded-xl text-center">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Watch Time</p>
+                <p className="text-lg font-extrabold text-indigo-300 mt-1">{totalWatchHours} hrs</p>
+              </div>
+              <div className="bg-slate-950/40 p-3 border border-slate-800/80 rounded-xl text-center">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Read Time</p>
+                <p className="text-lg font-extrabold text-emerald-300 mt-1">{totalReadHours} hrs</p>
+              </div>
+            </div>
+            <div className="bg-indigo-950/20 p-3 border border-indigo-500/10 rounded-xl flex items-center justify-between text-xs">
+              <span className="text-slate-400 font-medium">Total Time Spent</span>
+              <span className="font-bold text-indigo-400">{(totalWatchHours + totalReadHours).toFixed(1)} hrs</span>
+            </div>
+          </div>
+
           {/* Franchise Clustering Info Box */}
           <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 backdrop-blur-sm">
             <div className="flex items-center gap-2 text-indigo-400 mb-3.5">

@@ -8,6 +8,7 @@ import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { MediaAggregator } from './services/mediaAggregator';
+import { startBackgroundChecker } from './services/releaseChecker';
 
 // Load environment variables
 dotenv.config();
@@ -224,7 +225,7 @@ app.post('/api/watchlist/add', authenticateToken, async (req: AuthenticatedReque
     });
 
     if (!media) {
-      let resolvedTotalEpisodes = type === 'ANIME' || type === 'TV_SHOW' ? totalProgress : null;
+      let resolvedTotalEpisodes = type === 'ANIME' || type === 'TV_SHOW' || type === 'MOVIE' ? totalProgress : null;
       let resolvedTotalChapters = type === 'MANGA' || type === 'LIGHT_NOVEL' ? totalProgress : null;
 
       // Dynamically fetch accurate total counts using externalId
@@ -278,7 +279,7 @@ app.post('/api/watchlist/add', authenticateToken, async (req: AuthenticatedReque
           titleRomaji: franchise || `${title} Franchise`,
           coverImage: coverImage,
           synopsis: synopsis,
-          status: 'RELEASING',
+          status: type === 'MOVIE' ? 'FINISHED' : 'RELEASING',
           totalEpisodes: resolvedTotalEpisodes,
           totalChapters: resolvedTotalChapters
         }
@@ -579,27 +580,27 @@ app.get('/api/search', async (req: Request, res: Response) => {
       }
     }
 
-    // Search YTS API for Movies
+    // Search IMDb-OT API for Movies
     if (type === 'ALL' || type === 'MOVIE') {
       try {
-        const ytsUrl = `https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(q)}`;
-        const movieResponse = await axios.get(ytsUrl);
-        const movies = movieResponse.data?.data?.movies || [];
+        const imdbUrl = `https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(q)}`;
+        const movieResponse = await axios.get(imdbUrl, { timeout: 5000 });
+        const movies = movieResponse.data?.description || [];
         
         const mappedMovies = movies.slice(0, 8).map((movie: any) => ({
-          id: `yts-${movie.id}`,
+          id: `imdb-${movie['#IMDB_ID']}`,
           type: 'MOVIE' as const,
-          title: movie.title || 'Unknown Movie',
-          franchise: `${movie.title || 'Unknown'} Franchise`,
-          coverImage: movie.medium_cover_image || movie.large_cover_image || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
-          synopsis: movie.summary || movie.synopsis || 'No synopsis available.',
+          title: movie['#TITLE'] || 'Unknown Movie',
+          franchise: `${movie['#TITLE'] || 'Unknown'} Franchise`,
+          coverImage: movie['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
+          synopsis: `Year: ${movie['#YEAR']}. Starring: ${movie['#ACTORS'] || 'N/A'}. AKA: ${movie['#AKA'] || 'N/A'}.`,
           totalProgress: 1,
           progressType: 'episode' as const
         }));
         
         dynamicResults = [...dynamicResults, ...mappedMovies];
       } catch (err) {
-        console.error("YTS Movies API fetch failed:", err);
+        console.error("IMDb Search API fetch failed:", err);
       }
     }
 
@@ -763,6 +764,8 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 const server = app.listen(PORT, () => {
   console.log(`🚀 Universal Media Tracker Server is running on port ${PORT}`);
   console.log(`👉 Health check available at http://localhost:${PORT}/health`);
+  // Start background loops
+  startBackgroundChecker();
 });
 
 // Graceful shutdown
