@@ -873,8 +873,9 @@ export default function Home() {
       return;
     }
 
+    const tempId = `temp-${Date.now()}`;
     const newItem: MediaItem = {
-      id: Date.now().toString(),
+      id: tempId,
       type: result.type,
       title: result.title,
       franchise: result.franchise,
@@ -886,6 +887,12 @@ export default function Home() {
       lastUpdated: "Added just now",
       nextAiringEpisode: result.nextAiringEpisode
     };
+
+    // Add to state immediately
+    setMediaList((prev) => [newItem, ...prev]);
+    setNotificationMsg(`Added "${result.title}" instantly to your ledger!`);
+    setShowNotification(true);
+    setTimeout(() => setShowNotification(false), 3000);
 
     if (token) {
       fetch(`${getApiBaseUrl()}/api/watchlist/add`, {
@@ -910,23 +917,27 @@ export default function Home() {
           return res.json();
         })
         .then((data) => {
-          newItem.id = data.progressId || newItem.id;
-          setMediaList((prev) => [newItem, ...prev]);
+          // Replace tempId with actual DB progressId
+          if (data.progressId) {
+            setMediaList((prev) =>
+              prev.map((item) =>
+                item.id === tempId ? { ...item, id: data.progressId } : item
+              )
+            );
+          }
         })
         .catch((err) => {
           console.error("Failed to add to DB:", err);
-          setMediaList((prev) => [newItem, ...prev]);
+          // Rollback: remove the temp item
+          setMediaList((prev) => prev.filter((item) => item.id !== tempId));
+          setNotificationMsg(`Error: Failed to save "${result.title}" to database.`);
+          setShowNotification(true);
+          setTimeout(() => setShowNotification(false), 3000);
         });
-    } else {
-      setMediaList((prev) => [newItem, ...prev]);
     }
 
     setIsModalOpen(false);
     setModalSearchQuery("");
-
-    setNotificationMsg(`Successfully added "${result.title}" to tracker!`);
-    setShowNotification(true);
-    setTimeout(() => setShowNotification(false), 3500);
   };
 
   const filteredMedia = mediaList.filter((item) => {
@@ -1326,7 +1337,7 @@ export default function Home() {
                     {/* Progress bar */}
                     <div className="space-y-2.5 mt-6 sm:mt-4">
                       <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-slate-350">
-                        <span>Progress: {detailsItem.currentProgress} / {detailsItem.totalProgress} {detailsItem.progressType}s</span>
+                        <span>Progress: {detailsItem.currentProgress}/{detailsItem.totalProgress} {detailsItem.progressType}s</span>
                         <span className={isCompleted ? "text-emerald-400" : "text-[#ff2e43]"}>{percent}%</span>
                       </div>
                       <div className="h-1.5 w-full bg-[#050608] rounded-full overflow-hidden">
@@ -1598,10 +1609,10 @@ export default function Home() {
           <div className="flex items-center justify-between bg-[#0f1015] border border-[#1f212a] p-1 sm:p-1.5 rounded-2xl gap-2 shadow-sm">
             <div className="flex gap-1 overflow-x-auto no-scrollbar scroll-smooth w-full sm:w-auto">
               {[
-                { label: "All Lists", value: "ALL" },
+                { label: "All", value: "ALL" },
                 { label: "Anime", value: "ANIME" },
-                { label: "Manga & Novels", value: "MANGA" },
-                { label: "TV Shows", value: "TV_SHOW" },
+                { label: "Manga", value: "MANGA" },
+                { label: "Series", value: "TV_SHOW" },
                 { label: "Movies", value: "MOVIE" }
               ].map((tab) => (
                 <button
@@ -1687,8 +1698,9 @@ export default function Home() {
                       {!isCompleted && (
                         <button
                           onClick={(e) => handleIncrement(item.id, e)}
-                          className="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-[#ff2e43] text-white flex items-center justify-center shadow-lg active:scale-90 hover:scale-105 hover:bg-[#e02034] transition-all duration-200"
-                          title={`Log +1 ${item.progressType}`}
+                          disabled={item.id.startsWith("temp-")}
+                          className={`absolute bottom-3 right-3 w-10 h-10 rounded-full bg-[#ff2e43] text-white flex items-center justify-center shadow-lg active:scale-90 hover:scale-105 hover:bg-[#e02034] transition-all duration-200 ${item.id.startsWith("temp-") ? "opacity-50 cursor-wait" : ""}`}
+                          title={item.id.startsWith("temp-") ? "Saving..." : `Log +1 ${item.progressType}`}
                         >
                           <Plus className="w-5 h-5" />
                         </button>
@@ -1762,10 +1774,8 @@ export default function Home() {
                               </div>
                             </div>
                           ) : (
-                            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1">
-                              Logged:{" "}
-                              <strong className="text-slate-100 font-bold">{item.currentProgress}</strong>{" "}
-                              / {item.totalProgress}
+                            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center">
+                              <span>Logged: <strong className="text-slate-100 font-bold">{item.currentProgress}</strong>/{item.totalProgress}</span>
 
                               <button
                                 onClick={(e) => {
@@ -1773,7 +1783,7 @@ export default function Home() {
                                   setEditingId(item.id);
                                   setCustomValue(item.currentProgress.toString());
                                 }}
-                                className="p-1 text-slate-500 hover:text-[#ff2e43] rounded transition-colors"
+                                className="ml-1.5 p-1 text-slate-500 hover:text-[#ff2e43] rounded transition-colors"
                                 title="Edit count manually"
                               >
                                 <Edit2 className="w-2.5 h-2.5" />
@@ -1798,11 +1808,11 @@ export default function Home() {
                         {/* Action Buttons grid */}
                         <div className="flex gap-2">
                           <button
-                            disabled={isCompleted}
+                            disabled={isCompleted || item.id.startsWith("temp-")}
                             onClick={(e) => handleCatchUp(item.id, e)}
-                            className={`flex-1 py-1.5 rounded-lg text-[9px] uppercase tracking-wider font-extrabold transition-all flex items-center justify-center gap-1 min-h-[30px] ${isCompleted
+                            className={`flex-1 py-1.5 rounded-lg text-[9px] uppercase tracking-wider font-extrabold transition-all flex items-center justify-center gap-1 min-h-[30px] ${isCompleted || item.id.startsWith("temp-")
                                 ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
-                                : "bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-350 hover:text-white"
+                                : "bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-355 hover:text-white"
                               }`}
                           >
                             {isCompleted ? (
@@ -1820,8 +1830,9 @@ export default function Home() {
 
                           <button
                             onClick={(e) => handleReset(item.id, e)}
+                            disabled={item.id.startsWith("temp-")}
                             title="Reset tracking count to 0"
-                            className="p-1.5 bg-[#050608] border border-[#1f212a] hover:border-red-950 text-slate-500 hover:text-[#ff2e43] rounded-lg transition-all min-h-[30px] flex items-center justify-center"
+                            className={`p-1.5 bg-[#050608] border border-[#1f212a] hover:border-red-950 text-slate-500 hover:text-[#ff2e43] rounded-lg transition-all min-h-[30px] flex items-center justify-center ${item.id.startsWith("temp-") ? "opacity-50 cursor-wait" : ""}`}
                           >
                             <RotateCcw className="w-3 h-3" />
                           </button>
@@ -1935,10 +1946,10 @@ export default function Home() {
               className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-3 py-2.5 text-slate-355 font-bold"
             >
               <option value="ALL">All Categories</option>
-              <option value="ANIME">Anime (Live AniList)</option>
-              <option value="MANGA">Manga & Novels (Live AniList)</option>
-              <option value="TV_SHOW">TV Series (Live TMDB)</option>
-              <option value="MOVIE">Movies (Live TMDB)</option>
+              <option value="ANIME">Anime</option>
+              <option value="MANGA">Manga</option>
+              <option value="TV_SHOW">Series</option>
+              <option value="MOVIE">Movies</option>
             </select>
           </div>
 
