@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "npx serve out -p $PORT",
     "lint": "eslint",
     "app:build": "next build && npx cap sync",
     "app:open:android": "npx cap open android",
