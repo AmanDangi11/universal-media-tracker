@@ -917,11 +917,13 @@ export default function Home() {
           return res.json();
         })
         .then((data) => {
-          // Replace tempId with actual DB progressId
+          // Replace tempId with actual DB progressId and resolved totalProgress
           if (data.progressId) {
             setMediaList((prev) =>
               prev.map((item) =>
-                item.id === tempId ? { ...item, id: data.progressId } : item
+                item.id === tempId
+                  ? { ...item, id: data.progressId, totalProgress: data.totalProgress || item.totalProgress }
+                  : item
               )
             );
           }

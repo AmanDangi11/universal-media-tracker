@@ -326,7 +326,8 @@ app.post('/api/watchlist/add', authenticateToken, async (req: AuthenticatedReque
 
     res.status(201).json({
       message: 'Added to watchlist successfully',
-      progressId: progress.id
+      progressId: progress.id,
+      totalProgress: media.totalEpisodes || media.totalChapters || 12
     });
   } catch (error) {
     console.error('Adding media failed:', error);
