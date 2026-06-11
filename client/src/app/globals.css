@@ -1,26 +1,90 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Cinematic Pitch-Dark Theme Palette */
+  --background: #050608;
+  --foreground: #f3f4f6;
+  
+  --color-card-bg: #0f1015;
+  --color-card-border: #1f212a;
+  --color-accent-red: #ff2e43;
+  --color-accent-indigo: #6366f1;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  
+  /* Additional Tailwind v4 custom theme colors */
+  --color-card-bg: var(--color-card-bg);
+  --color-card-border: var(--color-card-border);
+  --color-accent-red: var(--color-accent-red);
+  --color-accent-indigo: var(--color-accent-indigo);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  /* Prevent horizontal bounce on scroll */
+  overscroll-behavior-x: none;
+}
+
+/* Hide scrollbar utility (for mobile bottom tabs and tag rows) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom premium thin scrollbar for dashboard items */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #07080a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1f212a;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2b2e3b;
+}
+
+/* Glassmorphism helpers */
+.glass-panel {
+  background: rgba(15, 16, 21, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-card-hover {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 46, 67, 0.25);
+  box-shadow: 0 10px 30px -10px rgba(255, 46, 67, 0.15);
+}
+
+/* Professional notch and status bar safe areas for mobile app wrappers */
+header {
+  padding-top: calc(12px + env(safe-area-inset-top, 0px)) !important;
+}
+
+/* Adjust the floating bottom mobile navigation bar on device with home indicator */
+.fixed.bottom-4 {
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
 }

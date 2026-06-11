@@ -199,7 +199,8 @@ app.get('/api/watchlist', authenticateToken, async (req: AuthenticatedRequest, r
         currentProgress: item.currentProgress,
         totalProgress: media.totalEpisodes || media.totalChapters || 12,
         progressType: media.type === 'ANIME' || media.type === 'TV_SHOW' ? 'episode' : 'chapter',
-        lastUpdated: lastUpdatedText
+        lastUpdated: lastUpdatedText,
+        synopsis: media.synopsis
       };
     });
 

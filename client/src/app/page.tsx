@@ -24,7 +24,11 @@ import {
   Info,
   Check,
   Edit2,
-  Bookmark
+  Bookmark,
+  Settings,
+  Activity,
+  LogOut,
+  User
 } from "lucide-react";
 
 // Types
@@ -40,6 +44,7 @@ interface MediaItem {
   progressType: "episode" | "chapter";
   volume?: number;
   lastUpdated: string;
+  synopsis?: string;
   sourceMaterialProgress?: {
     title: string;
     current: number;
@@ -52,7 +57,6 @@ interface MediaItem {
   };
 }
 
-// Pre-defined Search Database for third-party aggregations
 interface SearchResult {
   id: string;
   type: "ANIME" | "MANGA" | "LIGHT_NOVEL" | "TV_SHOW" | "MOVIE";
@@ -70,7 +74,6 @@ interface SearchResult {
 }
 
 const GLOBAL_CATALOG: SearchResult[] = [
-  // Anime
   {
     id: "cat-1",
     type: "ANIME",
@@ -91,7 +94,6 @@ const GLOBAL_CATALOG: SearchResult[] = [
     totalProgress: 12,
     progressType: "episode"
   },
-  // Manga/Manhua
   {
     id: "cat-3",
     type: "MANGA",
@@ -112,7 +114,6 @@ const GLOBAL_CATALOG: SearchResult[] = [
     totalProgress: 1110,
     progressType: "chapter"
   },
-  // TV Shows/Movies
   {
     id: "cat-5",
     type: "TV_SHOW",
@@ -178,14 +179,26 @@ interface AiringSchedule {
 }
 
 const getApiBaseUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
   if (typeof window !== "undefined") {
+    const savedUrl = localStorage.getItem("UMT_API_URL");
+    if (savedUrl) {
+      return savedUrl;
+    }
+    const isCapacitor = (window as any).Capacitor !== undefined;
+    if (isCapacitor) {
+      const cap = (window as any).Capacitor;
+      if (cap.getPlatform() === "android") {
+        return "http://10.0.2.2:5000";
+      }
+      return "http://localhost:5000";
+    }
     if (window.location.hostname === "14df525de8d485.lhr.life" || window.location.hostname === "3369ccf4201b95.lhr.life") {
       return "https://ad35b38df0678b.lhr.life";
     }
     return `http://${window.location.hostname}:5000`;
+  }
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
   }
   return "http://localhost:5000";
 };
@@ -220,9 +233,16 @@ export default function Home() {
   // Inline custom progress editor states
   const [editingId, setEditingId] = useState<string | null>(null);
   const [customValue, setCustomValue] = useState("");
+  const [selectedDetailsItem, setSelectedDetailsItem] = useState<MediaItem | null>(null);
+  const [fetchedDescriptions, setFetchedDescriptions] = useState<Record<string, string>>({});
+  const [loadingDescription, setLoadingDescription] = useState(false);
 
   // Airing Calendar states: Derived dynamically from active watchlist!
   const [airingCalendar, setAiringCalendar] = useState<{ id: string; title: string; schedule: AiringSchedule }[]>([]);
+
+  // Settings & Custom API URL configuration
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [customApiUrl, setCustomApiUrl] = useState("");
 
   // Set isMounted to true on client mount to bypass Next.js hydration issues
   useEffect(() => {
@@ -233,7 +253,111 @@ export default function Home() {
       setToken(savedToken);
       setUser(JSON.parse(savedUser));
     }
+    // Initialize settings state
+    setCustomApiUrl(localStorage.getItem("UMT_API_URL") || getApiBaseUrl());
   }, []);
+
+  // Synchronize modal search category selection with the currently active filter tab
+  useEffect(() => {
+    setSelectedMediaType(activeTab);
+  }, [activeTab]);
+
+  // Dynamic description auto-fetcher for items with missing synopses
+  useEffect(() => {
+    if (!selectedDetailsItem) return;
+
+    const detailsItem = mediaList.find(m => m.id === selectedDetailsItem.id) || selectedDetailsItem;
+
+    // If we already have a synopsis, no need to fetch
+    if (detailsItem.synopsis && detailsItem.synopsis !== "No synopsis available.") {
+      return;
+    }
+
+    // If we already fetched it in this session, use it
+    if (fetchedDescriptions[detailsItem.id]) {
+      return;
+    }
+
+    const fetchDescription = async () => {
+      setLoadingDescription(true);
+      try {
+        let description = "";
+
+        if (detailsItem.type === "ANIME" || detailsItem.type === "MANGA" || detailsItem.type === "LIGHT_NOVEL") {
+          const query = `
+            query ($search: String, $type: MediaType) {
+              Media (search: $search, type: $type) {
+                description
+              }
+            }
+          `;
+          const res = await fetch("https://graphql.anilist.co", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query,
+              variables: {
+                search: detailsItem.title,
+                type: detailsItem.type === "ANIME" ? "ANIME" : "MANGA"
+              }
+            })
+          });
+          if (res.ok) {
+            const json = await res.json();
+            description = json?.data?.Media?.description || "";
+          }
+        } else if (detailsItem.type === "TV_SHOW") {
+          const res = await fetch(`https://api.tvmaze.com/singlequery/shows?q=${encodeURIComponent(detailsItem.title)}`);
+          if (res.ok) {
+            const json = await res.json();
+            description = json?.summary || "";
+          }
+        } else if (detailsItem.type === "MOVIE") {
+          const res = await fetch(`https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(detailsItem.title)}`);
+          if (res.ok) {
+            const json = await res.json();
+            const movie = json?.description?.[0];
+            if (movie) {
+              description = `Year: ${movie['#YEAR']}. Starring: ${movie['#ACTORS'] || 'N/A'}. AKA: ${movie['#AKA'] || 'N/A'}.`;
+            }
+          }
+        }
+
+        // Strip HTML tags from description if any
+        const cleanDesc = description ? description.replace(/<[^>]*>/g, "") : "No synopsis available.";
+
+        setFetchedDescriptions(prev => ({
+          ...prev,
+          [detailsItem.id]: cleanDesc
+        }));
+
+        // Update local media list state so it is visible in the modal and grid
+        setMediaList(prev => prev.map(m => {
+          if (m.id === detailsItem.id) {
+            return { ...m, synopsis: cleanDesc };
+          }
+          return m;
+        }));
+      } catch (err) {
+        console.error("Failed to dynamically fetch media description:", err);
+      } finally {
+        setLoadingDescription(false);
+      }
+    };
+
+    fetchDescription();
+  }, [selectedDetailsItem, mediaList, fetchedDescriptions]);
+
+  const handleSaveSettings = (url: string) => {
+    const trimmed = url.trim();
+    if (trimmed) {
+      localStorage.setItem("UMT_API_URL", trimmed);
+    } else {
+      localStorage.removeItem("UMT_API_URL");
+    }
+    setIsSettingsOpen(false);
+    window.location.reload();
+  };
 
   const fetchWatchlist = () => {
     if (!token) return;
@@ -399,9 +523,13 @@ export default function Home() {
   const calculateAnalytics = () => {
     let watchMinutes = 0;
     let readMinutes = 0;
+    let completedCount = 0;
 
     mediaList.forEach((item) => {
       const progress = item.currentProgress || 0;
+      if (progress === item.totalProgress) {
+        completedCount++;
+      }
       if (item.type === "ANIME") {
         watchMinutes += progress * 24;
       } else if (item.type === "TV_SHOW") {
@@ -416,10 +544,10 @@ export default function Home() {
     const watchHours = parseFloat((watchMinutes / 60).toFixed(1));
     const readHours = parseFloat((readMinutes / 60).toFixed(1));
 
-    return { watchHours, readHours };
+    return { watchHours, readHours, completedCount };
   };
 
-  const { watchHours: totalWatchHours, readHours: totalReadHours } = calculateAnalytics();
+  const { watchHours: totalWatchHours, readHours: totalReadHours, completedCount } = calculateAnalytics();
 
   // Fetch backend server health check on startup
   useEffect(() => {
@@ -438,18 +566,18 @@ export default function Home() {
   // Compute dynamic Airing Calendar based on user added watchlist media (no static or fallback data)
   useEffect(() => {
     const calendarEntries: { id: string; title: string; schedule: AiringSchedule }[] = [];
-    
+
     mediaList.forEach((item) => {
       // Show calendar only for ongoing/uncompleted items with a live upcoming airing episode
       if (item.currentProgress < item.totalProgress && item.nextAiringEpisode) {
         const date = new Date(item.nextAiringEpisode.airingAt * 1000);
         const timeLabel = date.toLocaleDateString([], { weekday: 'short' }) + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        
+
         const daysLeft = Math.ceil(item.nextAiringEpisode.timeUntilAiring / 3600 / 24);
         const noun = (item.type === "ANIME" || item.type === "TV_SHOW") ? "Episode" : "Chapter";
         const actionVerb = (item.type === "ANIME" || item.type === "TV_SHOW") ? "airs" : "releases";
         const actionGerund = (item.type === "ANIME" || item.type === "TV_SHOW") ? "airing" : "releasing";
-        
+
         let details = `${noun} ${item.nextAiringEpisode.episode} ${actionVerb} in ${daysLeft} days`;
         if (daysLeft <= 0) {
           details = `${noun} ${item.nextAiringEpisode.episode} is ${actionGerund} now/soon!`;
@@ -486,13 +614,13 @@ export default function Home() {
 
         // 1. Fetch Anime & Manga from AniList API (Public GraphQL)
         if (selectedMediaType === "ALL" || selectedMediaType === "ANIME" || selectedMediaType === "MANGA") {
-          const aniListType = selectedMediaType === "ALL" 
-            ? null 
+          const aniListType = selectedMediaType === "ALL"
+            ? null
             : (selectedMediaType === "ANIME" ? "ANIME" : "MANGA");
 
           const graphQLQuery = `
             query ($search: String, $type: MediaType) {
-              Page (page: 1, perPage: 5) {
+              Page (page: 1, perPage: 6) {
                 media (search: $search, type: $type) {
                   id
                   type
@@ -553,10 +681,10 @@ export default function Home() {
 
         // 2. Fetch Live Action TV/Movies from our Express search backend (which connects to TMDB)
         if (selectedMediaType === "ALL" || selectedMediaType === "TV_SHOW" || selectedMediaType === "MOVIE") {
-          const expressType = selectedMediaType === "ALL" 
-            ? "ALL" 
+          const expressType = selectedMediaType === "ALL"
+            ? "ALL"
             : selectedMediaType;
-          
+
           const expressUrl = `${getApiBaseUrl()}/api/search?q=${encodeURIComponent(modalSearchQuery)}&type=${expressType}`;
           const response = await fetch(expressUrl);
           if (response.ok) {
@@ -588,15 +716,15 @@ export default function Home() {
   }, [modalSearchQuery, selectedMediaType]);
 
   // Simulates standard instant Webhook / API fast progress tracker increments
-  const handleIncrement = (id: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    
+  const handleIncrement = (id: string, event?: React.MouseEvent) => {
+    if (event) event.stopPropagation();
+
     setMediaList((prev) =>
       prev.map((item) => {
         if (item.id === id) {
           if (item.currentProgress < item.totalProgress) {
             const nextProgress = item.currentProgress + 1;
-            
+
             if (token) {
               fetch(`${getApiBaseUrl()}/api/watchlist/update`, {
                 method: "POST",
@@ -630,7 +758,7 @@ export default function Home() {
   // Quick Action: Catch Up to Latest (One-click complete)
   const handleCatchUp = (id: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    
+
     setMediaList((prev) =>
       prev.map((item) => {
         if (item.id === id) {
@@ -805,7 +933,7 @@ export default function Home() {
     const matchesSearch =
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.franchise.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     if (!matchesSearch) return false;
 
     if (activeTab === "ALL") return true;
@@ -816,44 +944,49 @@ export default function Home() {
     return true;
   });
 
+  // Derived in-progress items for "Up Next" horizontal bar
+  const inProgressMedia = mediaList.filter(
+    (item) => item.currentProgress > 0 && item.currentProgress < item.totalProgress
+  );
+
   if (!isMounted) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-sans">
-        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#050608] text-[#f3f4f6] flex items-center justify-center font-sans">
+        <div className="w-10 h-10 border-4 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  // IF USER IS NOT LOGGED IN, RENDER AUTHENTICATION VIEW
+  // IF USER IS NOT LOGGED IN, RENDER AUTHENTICATION VIEW (Trakt style cinematic dark login)
   if (!token) {
     return (
-      <div className="min-h-screen text-slate-100 flex items-center justify-center p-4 relative font-sans selection:bg-indigo-500 selection:text-white overflow-hidden bg-slate-950">
+      <div className="min-h-screen text-[#f3f4f6] flex items-center justify-center p-4 relative font-sans selection:bg-[#ff2e43] selection:text-white overflow-hidden bg-[#050608]">
         {/* Ambient background glows */}
-        <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-indigo-900/10 rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-fuchsia-950/15 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-[#ff2e43]/5 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-500/5 rounded-full blur-[140px] pointer-events-none" />
 
-        <div className="w-full max-w-md bg-slate-900/40 border border-slate-800/80 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
+        <div className="w-full max-w-md bg-[#0f1015]/80 border border-[#1f212a] rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
           {/* Top Brand Banner */}
           <div className="flex flex-col items-center text-center gap-3 mb-8">
-            <div className="p-3 bg-gradient-to-tr from-indigo-500 to-fuchsia-500 rounded-2xl shadow-lg shadow-indigo-500/20">
-              <TrendingUp className="w-6 h-6 text-white" />
+            <div className="p-3 bg-[#ff2e43] rounded-2xl shadow-lg shadow-[#ff2e43]/20 animate-pulse">
+              <Play className="w-6 h-6 text-white fill-white ml-0.5" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight bg-gradient-to-r from-white via-indigo-100 to-indigo-300 bg-clip-text text-transparent">
-                Universal Media Tracker
+              <h1 className="text-2xl font-black tracking-tight text-white flex items-center justify-center gap-1">
+                Binge<span className="text-[#ff2e43]">Log</span>
               </h1>
-              <p className="text-xs text-slate-400 mt-1 font-semibold">Unified Franchise Progress Ledger</p>
+              <p className="text-xs text-slate-400 mt-1 font-semibold uppercase tracking-wider">Cinematic Entertainment Ledger</p>
             </div>
           </div>
 
           {/* Form Content */}
           <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
-            <h2 className="text-xs font-extrabold uppercase tracking-widest text-indigo-400 mb-2">
-              {isRegistering ? "Create Account" : "Access Ledger"}
+            <h2 className="text-xs font-bold uppercase tracking-widest text-[#ff2e43] mb-2">
+              {isRegistering ? "Create Account" : "Access Watchlist"}
             </h2>
 
             {authError && (
-              <div className="p-3 bg-red-950/30 border border-red-500/20 text-red-400 text-xs font-semibold rounded-xl animate-shake">
+              <div className="p-3 bg-red-950/20 border border-[#ff2e43]/30 text-[#ff2e43] text-xs font-semibold rounded-xl">
                 ⚠️ {authError}
               </div>
             )}
@@ -863,10 +996,11 @@ export default function Home() {
                 <label className="text-[10px] uppercase font-bold text-slate-400">Username</label>
                 <input
                   type="text"
-                  placeholder="e.g. yashv"
+                  placeholder="Enter username"
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-xs rounded-xl px-4 py-3 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 transition-all font-semibold"
+                  className="w-full bg-[#050608] border border-[#1f212a] text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                  autoComplete="username"
                   required
                 />
               </div>
@@ -876,10 +1010,11 @@ export default function Home() {
               <label className="text-[10px] uppercase font-bold text-slate-400">Email Address</label>
               <input
                 type="email"
-                placeholder="e.g. name@example.com"
+                placeholder="Enter email address"
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 text-xs rounded-xl px-4 py-3 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 transition-all font-semibold"
+                className="w-full bg-[#050608] border border-[#1f212a] text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                autoComplete="email"
                 required
               />
             </div>
@@ -888,10 +1023,11 @@ export default function Home() {
               <label className="text-[10px] uppercase font-bold text-slate-400">Password</label>
               <input
                 type="password"
-                placeholder="Enter password..."
+                placeholder="Enter password"
                 value={passwordInput}
                 onChange={(e) => setPasswordInput(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 text-xs rounded-xl px-4 py-3 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 transition-all font-semibold"
+                className="w-full bg-[#050608] border border-[#1f212a] text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                autoComplete={isRegistering ? "new-password" : "current-password"}
                 required
               />
             </div>
@@ -899,12 +1035,12 @@ export default function Home() {
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full py-3.5 bg-gradient-to-r from-indigo-500 to-fuchsia-500 hover:from-indigo-600 hover:to-fuchsia-600 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-500/25 active:scale-95 flex items-center justify-center gap-2 min-h-[44px] mt-6"
+              className="w-full py-3.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-[#ff2e43]/20 active:scale-95 flex items-center justify-center gap-2 min-h-[44px] mt-6"
             >
               {authLoading ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : isRegistering ? (
-                "Create Account"
+                "Create Free Account"
               ) : (
                 "Sign In"
               )}
@@ -912,15 +1048,15 @@ export default function Home() {
           </form>
 
           {/* Form Switcher */}
-          <div className="mt-6 pt-4 border-t border-slate-800/80 text-center">
+          <div className="mt-6 pt-4 border-t border-[#1f212a] text-center">
             <button
               onClick={() => {
                 setIsRegistering(!isRegistering);
                 setAuthError("");
               }}
-              className="text-[11px] font-bold text-slate-400 hover:text-indigo-400 transition-all"
+              className="text-[11px] font-bold text-slate-400 hover:text-[#ff2e43] transition-all"
             >
-              {isRegistering ? "Already have an account? Sign In" : "Need an account? Register here"}
+              {isRegistering ? "Already have an account? Sign In" : "Don't have an account yet? Register here"}
             </button>
           </div>
         </div>
@@ -929,50 +1065,107 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white overflow-x-hidden pb-12">
-      
-      {/* Background Ambient Decorative Gradients */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-indigo-900/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-fuchsia-950/15 rounded-full blur-[120px] pointer-events-none" />
+    <div className="min-h-screen bg-[#050608] text-[#f3f4f6] font-sans selection:bg-[#ff2e43] selection:text-white overflow-x-hidden pb-12">
 
       {/* Floating Webhook Progress Notification Card */}
       {showNotification && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-indigo-950/90 border border-indigo-500/30 text-indigo-200 px-5 py-4 rounded-xl shadow-2xl backdrop-blur-md animate-bounce max-w-[90vw]">
-          <Zap className="w-5 h-5 text-indigo-400 fill-indigo-400 flex-shrink-0" />
-          <span className="text-xs sm:text-sm font-semibold">{notificationMsg}</span>
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-[#0f1015] border border-[#1f212a] text-slate-200 px-4 py-3.5 rounded-2xl shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom-4 duration-200 max-w-[90vw]">
+          <Zap className="w-4 h-4 text-[#ff2e43] fill-[#ff2e43] flex-shrink-0 animate-bounce" />
+          <span className="text-xs font-semibold">{notificationMsg}</span>
         </div>
       )}
 
-      {/* DYNAMIC 'ADD MEDIA' DIALOG MODAL (Fully Mobile-Friendly) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-md p-0 sm:p-4">
-          <div className="bg-slate-900 border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col h-[90vh] sm:h-auto sm:max-h-[85vh] animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
-            
-            {/* Modal Header */}
-            <div className="p-5 sm:p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+      {/* APP SETTINGS MODAL */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
+          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
+
+            {/* Header */}
+            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
               <div className="flex items-center gap-2">
-                <PlusCircle className="w-5 h-5 text-indigo-400" />
-                <h2 className="text-base sm:text-lg font-bold text-slate-100">Add New Media (Live Sync)</h2>
+                <Settings className="w-5 h-5 text-[#ff2e43]" />
+                <h2 className="text-base font-bold text-slate-100">App Settings</h2>
               </div>
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-100 rounded-xl transition-all"
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Modal Search Controls (Stacked on mobile, row on tablet/desktop) */}
-            <div className="p-5 sm:p-6 bg-slate-950/50 border-b border-slate-800 flex flex-col sm:flex-row gap-3 sm:gap-4">
-              {/* Query Input */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                  Backend API URL
+                </label>
                 <input
                   type="text"
-                  placeholder="Search live online databases... (e.g. Solo Leveling, Attack on Titan)"
+                  placeholder="http://localhost:5000"
+                  value={customApiUrl}
+                  onChange={(e) => setCustomApiUrl(e.target.value)}
+                  className="w-full bg-[#050608] border border-[#1f212a] text-sm rounded-xl px-4 py-3 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-mono"
+                />
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                  Default autodetected. For Android emulators, use <code className="text-slate-450 font-mono">http://10.0.2.2:5000</code>. For local network physical devices, use your computer's local IP (e.g. <code className="text-slate-450 font-mono">http://192.168.1.50:5000</code>).
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-end gap-2.5 px-6">
+              <button
+                onClick={() => {
+                  setCustomApiUrl("");
+                  handleSaveSettings("");
+                }}
+                className="px-4 py-2.5 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all"
+              >
+                Reset Default
+              </button>
+              <button
+                onClick={() => handleSaveSettings(customApiUrl)}
+                className="px-4 py-2.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md"
+              >
+                Save & Apply
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* DYNAMIC 'ADD MEDIA' DIALOG MODAL (Fully Mobile-Friendly) */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
+          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col h-[90vh] sm:h-auto sm:max-h-[85vh] animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
+
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
+              <div className="flex items-center gap-2">
+                <PlusCircle className="w-5 h-5 text-[#ff2e43]" />
+                <h2 className="text-base sm:text-lg font-bold text-slate-100">Add New Media (Live Sync)</h2>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Search Controls */}
+            <div className="p-5 sm:p-6 bg-[#050608]/50 border-b border-[#1f212a] flex flex-col sm:flex-row gap-3 sm:gap-4">
+              {/* Query Input */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-450" />
+                <input
+                  type="text"
+                  placeholder="Search live online databases... (e.g. Solo Leveling, Game of Thrones)"
                   value={modalSearchQuery}
                   onChange={(e) => setModalSearchQuery(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 text-sm rounded-xl pl-10 pr-4 py-3 sm:py-2.5 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/25 transition-all"
+                  className="w-full bg-[#0f1015] border border-[#1f212a] text-sm rounded-xl pl-10 pr-4 py-3 sm:py-2.5 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
                 />
               </div>
 
@@ -980,7 +1173,7 @@ export default function Home() {
               <select
                 value={selectedMediaType}
                 onChange={(e) => setSelectedMediaType(e.target.value as any)}
-                className="bg-slate-900 border border-slate-800 text-sm rounded-xl px-4 py-3 sm:py-2.5 text-slate-300 focus:outline-none focus:border-indigo-500/50 transition-all font-semibold"
+                className="bg-[#0f1015] border border-[#1f212a] text-sm rounded-xl px-4 py-3 sm:py-2.5 text-slate-300 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
               >
                 <option value="ALL">All Categories</option>
                 <option value="ANIME">Anime (Live AniList)</option>
@@ -990,58 +1183,43 @@ export default function Home() {
               </select>
             </div>
 
-            {/* Modal Search Results list (Highly scrollable and responsive) */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4 max-h-[50vh] sm:max-h-[45vh]">
+            {/* Modal Search Results list */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 max-h-[50vh] sm:max-h-[45vh]">
               {isLoadingSearch ? (
-                <div className="text-center py-16 text-indigo-400 flex flex-col items-center justify-center gap-3">
-                  <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                  <p className="text-xs font-semibold text-slate-400">Searching live online databases...</p>
+                <div className="text-center py-16 text-[#ff2e43] flex flex-col items-center justify-center gap-3">
+                  <div className="w-8 h-8 border-4 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs font-semibold text-slate-400">Searching global entertainment index...</p>
                 </div>
               ) : searchResults.length > 0 ? (
                 searchResults.map((result) => (
-                  <div 
+                  <div
                     key={result.id}
-                    className="flex flex-col sm:flex-row gap-3.5 sm:gap-4 p-4 bg-slate-950/40 border border-slate-850/80 rounded-2xl hover:border-indigo-500/25 transition-all group"
+                    className="flex gap-4 p-4 bg-[#050608]/40 border border-[#1f212a] rounded-2xl hover:border-[#ff2e43]/25 transition-all group"
                   >
-                    {/* Cover image & Title alignment */}
-                    <div className="flex sm:flex-col gap-3 sm:gap-0 flex-shrink-0">
-                      <div className="w-16 h-24 sm:w-16 sm:h-24 bg-slate-800 rounded-xl overflow-hidden flex-shrink-0">
-                        <img src={result.coverImage} alt={result.title} className="w-full h-full object-cover" />
-                      </div>
-                      
-                      {/* Mobile title layout */}
-                      <div className="sm:hidden flex-1 flex flex-col justify-between py-1">
-                        <div>
-                          <div className="flex justify-between items-start gap-1">
-                            <h4 className="text-xs font-bold text-slate-200 line-clamp-2">{result.title}</h4>
-                            <span className="text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 bg-indigo-950/60 border border-indigo-500/20 text-indigo-400 rounded-full flex-shrink-0">{result.type}</span>
-                          </div>
-                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{result.franchise}</p>
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-medium">Released: {result.totalProgress} {result.progressType}s</span>
-                      </div>
+                    {/* Cover image */}
+                    <div className="w-16 h-24 bg-[#1f212a] rounded-xl overflow-hidden flex-shrink-0">
+                      <img src={result.coverImage} alt={result.title} className="w-full h-full object-cover" />
                     </div>
 
-                    {/* Details (Desktop & Mobile Content) */}
-                    <div className="flex-1 flex flex-col justify-between">
-                      <div className="hidden sm:block">
+                    {/* Details */}
+                    <div className="flex-1 flex flex-col justify-between min-w-0">
+                      <div>
                         <div className="flex justify-between items-start gap-2">
-                          <h4 className="text-sm font-bold text-slate-200 group-hover:text-indigo-400 transition-all line-clamp-1">{result.title}</h4>
-                          <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 bg-indigo-950/60 border border-indigo-500/20 text-indigo-400 rounded-full">{result.type}</span>
+                          <h4 className="text-sm font-bold text-slate-200 group-hover:text-[#ff2e43] transition-colors truncate">{result.title}</h4>
+                          <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#ff2e43]/10 border border-[#ff2e43]/25 text-[#ff2e43] rounded-full flex-shrink-0">{result.type}</span>
                         </div>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{result.franchise}</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5 truncate">{result.franchise}</p>
+                        <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed mt-1">{result.synopsis}</p>
                       </div>
-                      
-                      <p className="text-[11px] text-slate-400 line-clamp-3 sm:line-clamp-2 leading-relaxed sm:mt-1">{result.synopsis}</p>
-                      
-                      <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-slate-850/40">
-                        <span className="hidden sm:inline text-[10px] text-slate-500 font-medium">Size: {result.totalProgress} {result.progressType}s</span>
+
+                      <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-[#1f212a]">
+                        <span className="text-[10px] text-slate-550 font-medium">Released: {result.totalProgress} {result.progressType}s</span>
                         <button
                           onClick={() => handleAddMedia(result)}
-                          className="w-full sm:w-auto py-2.5 sm:py-1.5 px-4 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl sm:rounded-lg text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 min-h-[40px] sm:min-h-0"
+                          className="py-1.5 px-4 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-95"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          Add to Tracker
+                          Track Media
                         </button>
                       </div>
                     </div>
@@ -1049,145 +1227,414 @@ export default function Home() {
                 ))
               ) : (
                 <div className="text-center py-12 text-slate-500 flex flex-col items-center gap-2">
-                  <Info className="w-8 h-8 text-slate-700" />
-                  <p className="text-sm font-medium">Type a name above to search live databases.</p>
-                  <p className="text-xs text-slate-600">Connects directly to global AniList and TMDB REST catalogs!</p>
+                  <Info className="w-8 h-8 text-[#1f212a]" />
+                  <p className="text-sm font-medium">Type a show, movie, or manga name above.</p>
+                  <p className="text-xs text-slate-650">We query dynamic live databases to retrieve media data instantly.</p>
                 </div>
               )}
             </div>
 
             {/* Modal Footer Info */}
-            <div className="p-4 border-t border-slate-800 bg-slate-950/30 flex justify-between items-center text-[10px] text-slate-500 font-semibold px-6">
-              <span>Third-party API Sync enabled: AniList & TMDB v3</span>
-              <span className="hidden sm:flex items-center gap-1"><Clock className="w-3 h-3 text-slate-400" /> Fast-ingestion mode</span>
+            <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-between items-center text-[10px] text-slate-500 font-semibold px-6">
+              <span>Dynamic API Connected: AniList & TVmaze/YTS</span>
+              <span className="hidden sm:flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-slate-400" /> Real-time caching</span>
             </div>
 
           </div>
         </div>
       )}
 
-      {/* MAIN TOP BAR */}
-      <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-lg border-b border-slate-900 px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-2.5 md:gap-4 md:px-6">
-        
+      {/* MEDIA DETAILS MODAL */}
+      {selectedDetailsItem && (() => {
+        // Resolve item from active mediaList to display live progress updates!
+        const detailsItem = mediaList.find(m => m.id === selectedDetailsItem.id) || selectedDetailsItem;
+        const percent = Math.round((detailsItem.currentProgress / detailsItem.totalProgress) * 100);
+        const isCompleted = detailsItem.currentProgress === detailsItem.totalProgress;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4" onClick={() => setSelectedDetailsItem(null)}>
+            <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col h-[85vh] sm:h-auto sm:max-h-[85vh] animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
+
+              {/* Modal Header */}
+              <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
+                <div className="flex items-center gap-2">
+                  <Film className="w-5 h-5 text-[#ff2e43]" />
+                  <h2 className="text-base font-bold text-slate-100 uppercase tracking-wider">Media Details</h2>
+                </div>
+                <button
+                  onClick={() => setSelectedDetailsItem(null)}
+                  className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="flex flex-col sm:flex-row gap-6">
+                  {/* Poster image */}
+                  <div className="w-40 h-60 bg-slate-900 rounded-2xl overflow-hidden border border-[#1f212a] flex-shrink-0 mx-auto sm:mx-0 shadow-lg relative">
+                    <img src={detailsItem.coverImage} alt={detailsItem.title} className="w-full h-full object-cover" />
+                    <span className="absolute bottom-3 left-3 text-[9px] font-extrabold px-2.5 py-1 rounded bg-black/85 text-slate-200 border border-[#1f212a] uppercase tracking-widest">
+                      {detailsItem.type}
+                    </span>
+                  </div>
+
+                  {/* Title & Stats */}
+                  <div className="flex-1 flex flex-col justify-between min-w-0">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-[#ff2e43] uppercase tracking-widest block font-mono">
+                        {detailsItem.franchise}
+                      </span>
+                      <h3 className="text-xl font-black text-slate-100 mt-1.5 leading-snug">
+                        {detailsItem.title}
+                      </h3>
+
+                      <div className="flex flex-wrap items-center gap-2.5 mt-3">
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider ${isCompleted
+                            ? "bg-emerald-950 text-emerald-400 border border-emerald-500/25"
+                            : "bg-[#ff2e43]/15 text-[#ff2e43] border border-[#ff2e43]/20"
+                          }`}>
+                          {isCompleted ? "Completed" : "Releasing / Tracking"}
+                        </span>
+
+                        <span className="text-[10px] text-slate-450 font-bold bg-[#1f212a] px-2.5 py-1 rounded-md uppercase tracking-wider">
+                          Status: {detailsItem.status}
+                        </span>
+
+                        <span className="text-[10px] text-slate-450 font-bold bg-[#1f212a] px-2.5 py-1 rounded-md uppercase tracking-wider">
+                          Size: {detailsItem.totalProgress} {detailsItem.progressType}s
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Airing Information */}
+                    {detailsItem.nextAiringEpisode && !isCompleted && (
+                      <div className="mt-4 p-3 bg-[#050608] border border-[#1f212a] rounded-xl flex items-center gap-2.5">
+                        <Tv className="w-5 h-5 text-[#ff2e43] flex-shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-200">
+                            Upcoming Episode {detailsItem.nextAiringEpisode.episode}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                            Releases in {Math.ceil(detailsItem.nextAiringEpisode.timeUntilAiring / 3600 / 24)} days ({new Date(detailsItem.nextAiringEpisode.airingAt * 1000).toLocaleDateString()})
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Progress bar */}
+                    <div className="space-y-2.5 mt-6 sm:mt-4">
+                      <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-slate-350">
+                        <span>Progress: {detailsItem.currentProgress} / {detailsItem.totalProgress} {detailsItem.progressType}s</span>
+                        <span className={isCompleted ? "text-emerald-400" : "text-[#ff2e43]"}>{percent}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-[#050608] rounded-full overflow-hidden">
+                        <div
+                          style={{ width: `${percent}%` }}
+                          className={`h-full rounded-full transition-all duration-500 ${isCompleted ? "bg-emerald-505" : "bg-[#ff2e43]"}`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Synopsis / Description */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-widest text-[#ff2e43]">Synopsis / Description</h4>
+                  <div className="bg-[#050608] border border-[#1f212a] p-4.5 rounded-2xl text-xs text-slate-300 leading-relaxed font-semibold max-h-48 overflow-y-auto">
+                    {loadingDescription ? (
+                      <div className="flex items-center justify-center py-4 gap-2 text-[#ff2e43]">
+                        <div className="w-4.5 h-4.5 border-2 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
+                        <span className="text-slate-450 font-semibold">Fetching description from database/online...</span>
+                      </div>
+                    ) : detailsItem.synopsis ? (
+                      detailsItem.synopsis
+                    ) : (
+                      "No synopsis available for this media."
+                    )}
+                  </div>
+                </div>
+
+                {/* Micro Action Buttons inside Modal */}
+                <div className="space-y-4 pt-2 border-t border-[#1f212a]/50">
+                  <h4 className="text-xs font-extrabold uppercase tracking-widest text-[#ff2e43]">Progress Controls</h4>
+
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      disabled={isCompleted}
+                      onClick={() => handleIncrement(detailsItem.id)}
+                      className={`flex-1 py-3 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-h-[42px] ${isCompleted
+                          ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
+                          : "bg-[#ff2e43] hover:bg-[#e02034] text-white shadow-lg shadow-[#ff2e43]/25 active:scale-95"
+                        }`}
+                    >
+                      {isCompleted ? (
+                        <>
+                          <CheckCircle className="w-4 h-4 text-emerald-400" />
+                          Completed
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4" />
+                          Log Next {detailsItem.progressType}
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={(e) => handleCatchUp(detailsItem.id, e)}
+                      disabled={isCompleted}
+                      className={`flex-1 py-3 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-h-[42px] ${isCompleted
+                          ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
+                          : "bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-300 hover:text-white active:scale-95"
+                        }`}
+                    >
+                      <Bookmark className="w-4 h-4" />
+                      Catch Up to Latest
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        handleReset(detailsItem.id, e);
+                        setCustomValue("0");
+                      }}
+                      className="p-3 bg-[#0f1015] border border-[#1f212a] hover:border-red-950 text-slate-400 hover:text-[#ff2e43] rounded-xl transition-all min-h-[42px] flex items-center justify-center active:scale-95"
+                      title="Reset tracking count to 0"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Manual entry field inside Modal */}
+                  <div className="bg-[#050608] border border-[#1f212a] p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <Edit2 className="w-4 h-4 text-slate-400" />
+                      <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Set Specific Progress:</span>
+                    </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <input
+                        type="number"
+                        min="0"
+                        max={detailsItem.totalProgress}
+                        value={customValue}
+                        onChange={(e) => setCustomValue(e.target.value)}
+                        className="w-20 bg-[#0f1015] border border-[#1f212a] rounded-xl px-3 py-2 text-center text-sm font-bold text-[#ff2e43] focus:outline-none focus:border-[#ff2e43]"
+                      />
+                      <button
+                        onClick={() => handleSaveCustomProgress(detailsItem.id, detailsItem.totalProgress, detailsItem.progressType)}
+                        className="px-4 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all active:scale-95 shadow-md shadow-[#ff2e43]/10"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MAIN TOP BAR (Trakt style header) */}
+      <header className="sticky top-0 z-40 bg-[#050608]/90 backdrop-blur-md border-b border-[#1f212a] px-4 py-3.5 flex flex-col md:flex-row justify-between items-center gap-4 md:px-8">
+
         {/* Brand Header */}
         <div className="flex justify-between items-center w-full md:w-auto">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-gradient-to-tr from-indigo-500 to-fuchsia-500 rounded-lg shadow-md shadow-indigo-500/20 flex-shrink-0">
-              <TrendingUp className="w-4.5 h-4.5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-sm sm:text-base font-bold tracking-tight bg-gradient-to-r from-white via-indigo-100 to-indigo-300 bg-clip-text text-transparent">
-                Universal Media Tracker
-              </h1>
-              <p className="text-[9px] text-slate-400 font-medium">Unified Franchise Ledger</p>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 bg-[#ff2e43] rounded-lg flex items-center justify-center shadow-lg shadow-[#ff2e43]/20">
+                <Play className="w-4 h-4 text-white fill-white ml-0.5" />
+              </div>
+              <div>
+                <h1 className="text-base font-black tracking-tight text-white flex items-center gap-1.5">
+                  Binge<span className="text-[#ff2e43]">Log</span>
+                  <span className={`w-2 h-2 rounded-full ${dbConnected ? "bg-emerald-500 shadow-lg shadow-emerald-500/50" : "bg-amber-500"}`} />
+                </h1>
+                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Unified Entertainment Ledger</p>
+              </div>
             </div>
           </div>
-          
-          {/* Mobile Right Controls: Supabase Dot + Quick Add Button */}
-          <div className="flex items-center gap-3.5 md:hidden">
-            <div 
-              className={`w-2 h-2 rounded-full ${dbConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} 
-              title={dbConnected ? "Supabase Connected" : "Supabase Offline"} 
-            />
+
+          {/* Mobile Right Controls */}
+          <div className="flex items-center gap-2 md:hidden">
+            <button
+              onClick={() => {
+                setCustomApiUrl(localStorage.getItem("UMT_API_URL") || getApiBaseUrl());
+                setIsSettingsOpen(true);
+              }}
+              className="p-2 bg-[#0f1015] border border-[#1f212a] hover:bg-[#1f212a] text-slate-400 hover:text-slate-200 rounded-xl transition-all shadow-md active:scale-95"
+              title="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
             <button
               onClick={() => setIsModalOpen(true)}
-              className="p-2 bg-indigo-650 hover:bg-indigo-600 text-white rounded-lg transition-all shadow-md active:scale-95"
+              className="p-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl transition-all shadow-md active:scale-95 shadow-[#ff2e43]/25"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Global Search & Dynamic Status */}
+        {/* Global Search & Actions */}
         <div className="flex items-center gap-3 w-full md:w-auto">
-          
+
           {/* Compact Search Input */}
           <div className="relative w-full md:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
               type="text"
               placeholder="Search watchlist..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-900/60 border border-slate-800 text-xs rounded-xl pl-9 pr-3.5 py-1.5 sm:py-2 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-all"
+              className="w-full bg-[#0f1015] border border-[#1f212a] text-xs rounded-xl pl-9 pr-3.5 py-2 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
             />
           </div>
 
-          {/* Database Connectivity Badge (Hidden on Mobile) */}
-          <div className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-semibold border transition-all ${
-            dbConnected 
-              ? "bg-emerald-950/40 border-emerald-500/20 text-emerald-400" 
-              : "bg-amber-950/40 border-amber-500/20 text-amber-400"
-          }`}>
-            <Database className="w-3.5 h-3.5" />
-            <span>Supabase: {dbConnected ? "Connected" : "API Active"}</span>
-            <div className={`w-1.5 h-1.5 rounded-full ${dbConnected ? "bg-emerald-400 animate-pulse" : "bg-emerald-400"}`} />
-          </div>
-
-          {/* Desktop Logout Button */}
+          {/* Add Media Trigger Button (Desktop) */}
           {user && (
             <button
-              onClick={handleLogout}
-              className="hidden md:block text-[10px] uppercase font-bold tracking-wider text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-500/25 px-3 py-1.5 rounded-xl transition-all font-semibold active:scale-95"
+              onClick={() => setIsModalOpen(true)}
+              className="hidden md:flex items-center gap-1.5 px-4 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 shadow-[#ff2e43]/15"
             >
-              Sign Out
+              <Plus className="w-4 h-4" />
+              Add Media
             </button>
+          )}
+
+          {/* Desktop Settings Button */}
+          {user && (
+            <button
+              onClick={() => {
+                setCustomApiUrl(localStorage.getItem("UMT_API_URL") || getApiBaseUrl());
+                setIsSettingsOpen(true);
+              }}
+              className="hidden md:flex items-center gap-1.5 px-3.5 py-2 bg-[#0f1015] border border-[#1f212a] hover:border-[#ff2e43]/30 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all active:scale-95"
+              title="App Settings"
+            >
+              <Settings className="w-4 h-4" />
+              Settings
+            </button>
+          )}
+
+          {/* Profile Card / Sign Out */}
+          {user && (
+            <div className="hidden md:flex items-center gap-3 pl-3 border-l border-[#1f212a]">
+              <div className="flex flex-col text-right">
+                <span className="text-xs font-bold text-slate-350">{user.username}</span>
+                <span className="text-[8px] text-slate-500 uppercase tracking-widest font-extrabold">Watcher</span>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-[#ff2e43] hover:border-[#ff2e43]/30 rounded-xl transition-all active:scale-95"
+                title="Sign Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           )}
 
         </div>
       </header>
 
-      {/* DYNAMIC WELCOME BANNER & ADD NEW BUTTON */}
-      <div className="hidden sm:block max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
-        <div className="relative rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-indigo-950/40 to-slate-900/40 border border-slate-850/80 backdrop-blur-sm overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6 shadow-xl">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
-          
-          <div className="space-y-2 text-center md:text-left">
-            <h2 className="text-lg md:text-2xl font-bold tracking-tight text-slate-100 flex items-center justify-center md:justify-start gap-2">
-              <Sparkles className="w-4.5 h-4.5 text-indigo-400 flex-shrink-0" />
-              Manage All Your Media in One Place
-            </h2>
-            <p className="text-[11px] md:text-sm text-slate-400 font-medium max-w-xl leading-relaxed">
-              Solve fragmentation instantly. Use the fast add tool to lookup any anime, manga, or web series from universal APIs and track your progress with zero friction.
-            </p>
-          </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-8 py-6 sm:py-10 grid grid-cols-1 lg:grid-cols-4 gap-8">
 
-          {/* ADD MEDIA TRIGGER BUTTON */}
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="w-full md:w-auto px-6 py-4 md:py-3.5 bg-gradient-to-r from-indigo-500 to-fuchsia-500 hover:from-indigo-600 hover:to-fuchsia-600 text-white rounded-2xl text-xs sm:text-sm font-bold shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all flex items-center justify-center gap-2 transform active:scale-95 duration-150 min-h-[44px]"
-          >
-            <Plus className="w-5 h-5 stroke-[2.5]" />
-            Add New Media
-          </button>
-        </div>
-      </div>
+        {/* ========================================================================= */}
+        {/* 1. UP NEXT / CONTINUE WATCHING HERO ROW (Horizontal Carousel)            */}
+        {/* ========================================================================= */}
+        {inProgressMedia.length > 0 && mobileActiveTab === "LIST" && (
+          <section className="col-span-full border-b border-[#1f212a] pb-6 sm:pb-8 animate-in fade-in duration-300">
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles className="w-4 h-4 text-[#ff2e43] fill-[#ff2e43]" />
+              <h2 className="text-xs font-extrabold uppercase tracking-widest text-[#f3f4f6]">Up Next To Watch</h2>
+            </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 grid grid-cols-1 lg:grid-cols-4 gap-6 sm:gap-8">
-        
-        {/* PROGRESS LIST LEDGER (Order-1: Positioned first on mobile screen viewports) */}
-        <section className={`lg:col-span-3 flex flex-col gap-6 order-1 lg:order-2 ${
-          mobileActiveTab === "LIST" ? "flex" : "hidden md:flex"
-        }`}>
-          
+            <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth">
+              {inProgressMedia.map((item) => {
+                const percent = Math.round((item.currentProgress / item.totalProgress) * 100);
+                const nextTarget = item.currentProgress + 1;
+
+                return (
+                  <div
+                    key={`upnext-${item.id}`}
+                    onClick={() => {
+                      setSelectedDetailsItem(item);
+                      setCustomValue(item.currentProgress.toString());
+                    }}
+                    className="flex-shrink-0 w-80 bg-[#0f1015] border border-[#1f212a] rounded-2xl p-3 flex gap-3 relative hover:border-[#ff2e43]/30 transition-all duration-300 group shadow-md cursor-pointer"
+                  >
+                    {/* Media Poster mini */}
+                    <div className="w-16 h-24 bg-slate-900 rounded-xl overflow-hidden flex-shrink-0 border border-[#1f212a]/50 relative">
+                      <img src={item.coverImage} alt={item.title} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                      <span className="absolute bottom-1 left-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-black/80 text-slate-300 border border-[#1f212a]">
+                        {item.type}
+                      </span>
+                    </div>
+
+                    {/* Progress details */}
+                    <div className="flex-1 flex flex-col justify-between min-w-0">
+                      <div>
+                        <span className="text-[8px] font-bold text-[#ff2e43] uppercase tracking-wider truncate block">{item.franchise}</span>
+                        <h3 className="text-xs font-bold text-slate-200 mt-0.5 truncate pr-6 group-hover:text-[#ff2e43] transition-colors">{item.title}</h3>
+                        <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                          Up Next: <span className="text-slate-100 font-bold">Ep/Ch {nextTarget}</span>
+                          <span className="text-slate-500 font-medium"> of {item.totalProgress}</span>
+                        </p>
+                      </div>
+
+                      {/* Micro progress meter */}
+                      <div className="space-y-1 mt-2">
+                        <div className="h-1 w-full bg-[#050608] rounded-full overflow-hidden">
+                          <div style={{ width: `${percent}%` }} className="h-full bg-gradient-to-r from-[#ff2e43] to-indigo-500 rounded-full" />
+                        </div>
+                        <div className="flex justify-between items-center text-[8px] text-slate-500 font-bold uppercase">
+                          <span>{percent}% Complete</span>
+                          <span>{item.totalProgress - item.currentProgress} remaining</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Fast watch circle trigger button */}
+                    <button
+                      onClick={() => handleIncrement(item.id)}
+                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-[#1f212a] border border-[#2b2e3b] text-slate-400 hover:text-white hover:bg-[#ff2e43] hover:border-[#ff2e43] flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-md"
+                      title={`Instant log ${item.progressType} ${nextTarget}`}
+                    >
+                      <Check className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 2. PROGRESS LIST LEDGER GRID (Order-1: Positioned first on mobile)        */}
+        {/* ========================================================================= */}
+        <section className={`lg:col-span-3 flex flex-col gap-6 order-1 lg:order-2 ${mobileActiveTab === "LIST" ? "flex" : "hidden md:flex"
+          }`}>
+
           {/* Dynamic Ledger Categories Controls */}
-          <div className="flex items-center justify-between bg-slate-900/30 border border-slate-900 p-1 sm:p-1.5 rounded-xl gap-2">
+          <div className="flex items-center justify-between bg-[#0f1015] border border-[#1f212a] p-1 sm:p-1.5 rounded-2xl gap-2 shadow-sm">
             <div className="flex gap-1 overflow-x-auto no-scrollbar scroll-smooth w-full sm:w-auto">
               {[
-                { label: "All Media", value: "ALL" },
-                { label: "Anime List", value: "ANIME" },
+                { label: "All Lists", value: "ALL" },
+                { label: "Anime", value: "ANIME" },
                 { label: "Manga & Novels", value: "MANGA" },
-                { label: "TV Series", value: "TV_SHOW" },
+                { label: "TV Shows", value: "TV_SHOW" },
                 { label: "Movies", value: "MOVIE" }
               ].map((tab) => (
                 <button
                   key={tab.value}
                   onClick={() => setActiveTab(tab.value as any)}
-                  className={`flex-1 sm:flex-none text-center px-3 py-2 rounded-lg text-[11px] font-bold tracking-wide transition-all min-w-[75px] sm:min-w-0 whitespace-nowrap ${
-                    activeTab === tab.value
-                      ? "bg-slate-900 text-white border border-slate-800 shadow-md"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-950/20"
-                  }`}
+                  className={`flex-1 sm:flex-none text-center px-4 py-2.5 rounded-xl text-[10px] sm:text-[11px] font-bold uppercase tracking-wider transition-all min-w-[75px] sm:min-w-0 whitespace-nowrap ${activeTab === tab.value
+                      ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/50"
+                    }`}
                 >
                   {tab.label}
                 </button>
@@ -1195,14 +1642,14 @@ export default function Home() {
             </div>
 
             {/* Quick Stats Indicator */}
-            <span className="hidden sm:inline text-xs text-indigo-400 font-bold bg-indigo-950/30 border border-indigo-500/10 px-3 py-1.5 rounded-full">
-              {filteredMedia.length} Tracking Entries Active
+            <span className="hidden sm:inline text-[10px] text-[#ff2e43] font-bold bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3.5 py-2 rounded-full uppercase tracking-wider">
+              {filteredMedia.length} Active Ledger Entries
             </span>
           </div>
 
-          {/* DYNAMIC LIST LEDGER CONTAINER */}
+          {/* DYNAMIC LIST LEDGER CONTAINER (Trakt vertical cards poster grid) */}
           {filteredMedia.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-in fade-in duration-300">
               {filteredMedia.map((item) => {
                 const percent = Math.round((item.currentProgress / item.totalProgress) * 100);
                 const isCompleted = item.currentProgress === item.totalProgress;
@@ -1211,199 +1658,211 @@ export default function Home() {
                 return (
                   <div
                     key={item.id}
-                    className="group relative bg-slate-900/30 hover:bg-slate-900/50 border border-slate-900 hover:border-indigo-500/20 rounded-3xl p-4 sm:p-5 flex gap-3.5 sm:gap-4 shadow-xl backdrop-blur-sm transition-all duration-300"
+                    onClick={() => {
+                      setSelectedDetailsItem(item);
+                      setCustomValue(item.currentProgress.toString());
+                    }}
+                    className={`group relative bg-[#0f1015] border rounded-2xl overflow-hidden transition-all duration-300 flex flex-col shadow-md hover:translate-y-[-4px] cursor-pointer ${isCompleted
+                        ? "border-emerald-500/20 hover:border-emerald-500/40 hover:shadow-emerald-500/5"
+                        : "border-[#1f212a] hover:border-[#ff2e43]/30 hover:shadow-[#ff2e43]/5"
+                      }`}
                   >
-                    
-                    {/* Media Thumbnail Container with Gradient Overlay */}
-                    <div className="relative w-20 h-32 sm:w-24 sm:h-36 rounded-2xl overflow-hidden shadow-md flex-shrink-0 bg-slate-800">
+
+                    {/* Media Thumbnail Poster Container (aspect 2/3) */}
+                    <div className="relative aspect-[3/4] w-full bg-slate-900 overflow-hidden border-b border-[#1f212a] flex-shrink-0">
                       <img
                         src={item.coverImage}
                         alt={item.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent" />
-                      
-                      {/* Media Category Badge */}
-                      <span className={`absolute top-2 left-2 text-[8px] font-bold px-1.5 py-0.5 rounded-full border ${
-                        item.type === "ANIME"
-                          ? "bg-indigo-950/80 border-indigo-500/30 text-indigo-300"
+
+                      {/* Gradient overlay for contrast */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/30 opacity-80" />
+
+                      {/* Media Category Badge overlay */}
+                      <span className={`absolute top-3 left-3 text-[8px] font-extrabold px-2 py-0.5 rounded-md border uppercase tracking-wider ${item.type === "ANIME"
+                          ? "bg-black/80 border-[#1f212a] text-[#ff2e43]"
                           : item.type === "MANGA"
-                          ? "bg-emerald-950/80 border-emerald-500/30 text-emerald-300"
-                          : "bg-fuchsia-950/80 border-fuchsia-500/30 text-fuchsia-300"
-                      }`}>
+                            ? "bg-black/80 border-[#1f212a] text-emerald-400"
+                            : item.type === "TV_SHOW"
+                              ? "bg-black/80 border-[#1f212a] text-indigo-400"
+                              : "bg-black/80 border-[#1f212a] text-fuchsia-400"
+                        }`}>
                         {item.type}
                       </span>
-                    </div>
 
-                    {/* Media Details */}
-                    <div className="flex-1 flex flex-col justify-between">
-                      <div>
-                        <div className="flex justify-between items-start gap-1">
-                          {/* Franchise name */}
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider text-ellipsis overflow-hidden whitespace-nowrap max-w-[100px] sm:max-w-[130px]">
-                            {item.franchise}
-                          </p>
-                          
-                          {/* QUICK ACTION: Catch Up to Latest */}
-                          {!isCompleted && (
-                            <button
-                              onClick={(e) => handleCatchUp(item.id, e)}
-                              className="px-2 py-1 bg-slate-900/65 hover:bg-emerald-950/45 text-slate-400 hover:text-emerald-400 border border-slate-800 hover:border-emerald-500/20 rounded-lg text-[9px] font-bold transition-all flex items-center gap-1 shadow-sm opacity-85 sm:opacity-60 hover:opacity-100"
-                              title={`Instant Catch Up to ${item.progressType} ${item.totalProgress}`}
-                            >
-                              <Bookmark className="w-2.5 h-2.5 flex-shrink-0" />
-                              Catch Up
-                            </button>
-                          )}
-                        </div>
-                        {/* Title */}
-                        <h3 className="text-xs sm:text-sm font-bold text-slate-200 mt-1 line-clamp-1 group-hover:text-indigo-400 transition-colors" title={item.title}>
-                          {item.title}
-                        </h3>
-                        {/* Update text */}
-                        <p className="text-[9px] text-slate-500 font-medium mt-0.5">
-                          Updated {item.lastUpdated}
-                        </p>
-                      </div>
+                      {/* Percent Pill Overlay */}
+                      <span className={`absolute top-3 right-3 text-[9px] font-bold px-2 py-0.5 rounded-md ${isCompleted
+                          ? "bg-emerald-950/80 text-emerald-400 border border-emerald-500/30"
+                          : "bg-[#ff2e43]/15 text-[#ff2e43] border border-[#ff2e43]/20"
+                        }`}>
+                        {percent}%
+                      </span>
 
-                      {/* FRANCHISE CLUSTERING HIGHLIGHT (Anime-Manga Single Card Comparison) */}
-                      {item.sourceMaterialProgress && (
-                        <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl text-[10px] space-y-1 my-1.5">
-                          <div className="flex items-center justify-between text-slate-400 font-medium">
-                            <span className="flex items-center gap-1">
-                              <BookOpen className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                              {item.sourceMaterialProgress.title}
-                            </span>
-                            <span className="text-slate-300 font-bold">
-                              Ch. {item.sourceMaterialProgress.current}/{item.sourceMaterialProgress.total}
-                            </span>
-                          </div>
-                          
-                          {/* Sync Gap Meter */}
-                          <div className="flex items-center justify-between text-[9px] text-indigo-400 font-bold">
-                            <span>Adaptation Sync Gap</span>
-                            <span>{item.sourceMaterialProgress.current - item.currentProgress * 20} chapters ahead</span>
-                          </div>
+                      {/* Airing Calendar indicator countdown on poster */}
+                      {item.nextAiringEpisode && !isCompleted && (
+                        <div className="absolute bottom-3 left-3 right-3 p-1.5 rounded-lg bg-black/85 border border-[#1f212a] text-[8px] font-bold text-slate-300 flex items-center gap-1">
+                          <Tv className="w-2.5 h-2.5 text-[#ff2e43]" />
+                          <span className="truncate">Ep {item.nextAiringEpisode.episode} in {Math.ceil(item.nextAiringEpisode.timeUntilAiring / 3600 / 24)} days</span>
                         </div>
                       )}
 
-                      {/* Tracker Progress Bar & Micro Action Controllers */}
-                      <div className="space-y-2 mt-auto">
+                      {/* Floating incremental Quick Log button on poster hover */}
+                      {!isCompleted && (
+                        <button
+                          onClick={(e) => handleIncrement(item.id, e)}
+                          className="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-[#ff2e43] text-white flex items-center justify-center shadow-lg active:scale-90 hover:scale-105 hover:bg-[#e02034] transition-all duration-200"
+                          title={`Log +1 ${item.progressType}`}
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Media Details */}
+                    <div className="p-4 flex-1 flex flex-col justify-between">
+                      <div>
+                        {/* Franchise name */}
+                        <p className="text-[8px] text-slate-550 font-bold uppercase tracking-wider truncate">
+                          {item.franchise}
+                        </p>
+
+                        {/* Title */}
+                        <h3 className="text-xs sm:text-sm font-bold text-slate-205 mt-1.5 line-clamp-1 group-hover:text-[#ff2e43] transition-colors" title={item.title}>
+                          {item.title}
+                        </h3>
+
+                        {/* Sync source details if present */}
+                        {item.sourceMaterialProgress && (
+                          <div className="mt-2 p-2 bg-[#050608] border border-[#1f212a] rounded-lg text-[9px] space-y-1">
+                            <div className="flex items-center justify-between text-slate-400 font-semibold">
+                              <span className="flex items-center gap-1 text-[8px] uppercase">
+                                <BookOpen className="w-3 h-3 text-emerald-400" />
+                                Manga Source
+                              </span>
+                              <span className="text-slate-300 font-bold">Ch. {item.sourceMaterialProgress.current}/{item.sourceMaterialProgress.total}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[8px] text-indigo-400 font-semibold">
+                              <span>Ingested Sync Gap</span>
+                              <span>{item.sourceMaterialProgress.current - item.currentProgress * 20} chs ahead</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Tracker Progress Controls */}
+                      <div className="space-y-3 mt-4 pt-3 border-t border-[#1f212a]/50">
                         <div className="flex justify-between items-center text-xs">
-                          {/* Interactive Inline Input Progress triggers */}
+                          {/* Inline manual editor */}
                           {isEditingThis ? (
-                            <div className="flex items-center gap-1.5 animate-in slide-in-from-left-2 duration-155">
-                              <input
-                                type="number"
-                                min="0"
-                                max={item.totalProgress}
-                                placeholder={item.currentProgress.toString()}
-                                value={customValue}
-                                onChange={(e) => setCustomValue(e.target.value)}
-                                className="w-14 sm:w-16 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-center focus:outline-none focus:border-indigo-500 text-indigo-200"
-                                autoFocus
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") handleSaveCustomProgress(item.id, item.totalProgress, item.progressType);
-                                  if (e.key === "Escape") setEditingId(null);
-                                }}
-                              />
-                              <button 
-                                onClick={() => handleSaveCustomProgress(item.id, item.totalProgress, item.progressType)}
-                                className="p-1 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-all"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                              </button>
-                              <button 
-                                onClick={() => setEditingId(null)}
-                                className="p-1 bg-slate-800 text-slate-400 rounded hover:bg-slate-700 transition-all"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
+                            <div className="flex items-center gap-1 w-full justify-between" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={item.totalProgress}
+                                  placeholder={item.currentProgress.toString()}
+                                  value={customValue}
+                                  onChange={(e) => setCustomValue(e.target.value)}
+                                  className="w-14 bg-[#050608] border border-[#1f212a] rounded px-1.5 py-0.5 text-xs text-center focus:outline-none focus:border-[#ff2e43] text-[#ff2e43] font-bold"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleSaveCustomProgress(item.id, item.totalProgress, item.progressType);
+                                    if (e.key === "Escape") setEditingId(null);
+                                  }}
+                                />
+                                <button
+                                  onClick={() => handleSaveCustomProgress(item.id, item.totalProgress, item.progressType)}
+                                  className="p-1 bg-[#ff2e43] text-white rounded hover:bg-[#e02034] transition-all"
+                                >
+                                  <Check className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingId(null)}
+                                  className="p-1 bg-[#1f212a] text-slate-400 rounded hover:bg-[#2b2e3b] transition-all"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
                             </div>
                           ) : (
-                            <span className="text-[11px] sm:text-xs text-slate-400 font-medium flex items-center gap-1.5">
-                              Progress:{" "}
-                              <strong className="text-slate-200">{item.currentProgress}</strong>{" "}
+                            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1">
+                              Logged:{" "}
+                              <strong className="text-slate-100 font-bold">{item.currentProgress}</strong>{" "}
                               / {item.totalProgress}
-                              
-                              {/* Edit triggers button (always visible on mobile for tap discoverability) */}
+
                               <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setEditingId(item.id);
                                   setCustomValue(item.currentProgress.toString());
                                 }}
-                                className="p-1 text-slate-500 hover:text-indigo-400 rounded transition-all opacity-100 sm:opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                title="Enter custom chapter"
+                                className="p-1 text-slate-500 hover:text-[#ff2e43] rounded transition-colors"
+                                title="Edit count manually"
                               >
-                                <Edit2 className="w-3 h-3" />
+                                <Edit2 className="w-2.5 h-2.5" />
                               </button>
                             </span>
                           )}
 
-                          <span className={`text-[10px] font-bold ${isCompleted ? "text-emerald-400" : "text-indigo-400"}`}>
-                            {percent}%
-                          </span>
+                          <span className="text-[9px] text-slate-500 font-medium">Updated {item.lastUpdated}</span>
                         </div>
 
-                        {/* Visual Progress Bar */}
-                        <div className="h-1.5 w-full bg-slate-950 rounded-full overflow-hidden">
+                        {/* Thin Progress bar */}
+                        <div className="h-1 w-full bg-[#050608] rounded-full overflow-hidden">
                           <div
                             style={{ width: `${percent}%` }}
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isCompleted 
-                                ? "bg-gradient-to-r from-emerald-500 to-teal-500" 
-                                : "bg-gradient-to-r from-indigo-500 to-fuchsia-500"
-                            }`}
+                            className={`h-full rounded-full transition-all duration-500 ${isCompleted
+                                ? "bg-emerald-500"
+                                : "bg-[#ff2e43]"
+                              }`}
                           />
                         </div>
 
-                        {/* Action Buttons (Minimum height 40px for mobile tap targets) */}
-                        <div className="flex gap-2 pt-1">
+                        {/* Action Buttons grid */}
+                        <div className="flex gap-2">
                           <button
                             disabled={isCompleted}
-                            onClick={(e) => handleIncrement(item.id, e)}
-                            className={`flex-1 py-2 sm:py-1.5 rounded-xl sm:rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-1.5 min-h-[38px] sm:min-h-0 ${
-                              isCompleted
-                                ? "bg-emerald-950/20 border border-emerald-950 text-emerald-500/60 cursor-not-allowed"
-                                : "bg-indigo-900/30 hover:bg-indigo-500 text-indigo-300 hover:text-white border border-indigo-500/20 hover:border-indigo-500 shadow-md shadow-indigo-900/20"
-                            }`}
+                            onClick={(e) => handleCatchUp(item.id, e)}
+                            className={`flex-1 py-1.5 rounded-lg text-[9px] uppercase tracking-wider font-extrabold transition-all flex items-center justify-center gap-1 min-h-[30px] ${isCompleted
+                                ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
+                                : "bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-350 hover:text-white"
+                              }`}
                           >
                             {isCompleted ? (
                               <>
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                Completed
+                                <CheckCircle className="w-3 h-3 text-emerald-500" />
+                                Watched
                               </>
                             ) : (
                               <>
-                                <Plus className="w-3.5 h-3.5" />
-                                Increment
+                                <Bookmark className="w-3 h-3" />
+                                Catch Up
                               </>
                             )}
                           </button>
 
                           <button
                             onClick={(e) => handleReset(item.id, e)}
-                            title="Reset Progress"
-                            className="p-2 sm:p-1.5 bg-slate-950/40 hover:bg-red-950/30 border border-slate-800 hover:border-red-500/30 text-slate-500 hover:text-red-400 rounded-xl sm:rounded-lg transition-all min-h-[38px] sm:min-h-0 flex items-center justify-center"
+                            title="Reset tracking count to 0"
+                            className="p-1.5 bg-[#050608] border border-[#1f212a] hover:border-red-950 text-slate-500 hover:text-[#ff2e43] rounded-lg transition-all min-h-[30px] flex items-center justify-center"
                           >
-                            <RotateCcw className="w-3.5 h-3.5" />
+                            <RotateCcw className="w-3 h-3" />
                           </button>
                         </div>
-
                       </div>
-
                     </div>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <div className="bg-slate-900/10 border border-slate-900 rounded-3xl p-8 sm:p-16 text-center backdrop-blur-sm flex flex-col items-center justify-center gap-4">
-              <Search className="w-12 h-12 text-slate-700" />
+            <div className="bg-[#0f1015] border border-[#1f212a] rounded-3xl p-8 sm:p-16 text-center flex flex-col items-center justify-center gap-4">
+              <Search className="w-12 h-12 text-[#1f212a]" />
               <div>
-                <h3 className="text-base font-bold text-slate-300">No media entries found locally</h3>
+                <h3 className="text-base font-bold text-slate-300">No media cards found matching search</h3>
                 <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto px-4">
-                  "{searchQuery}" is not in your current watchlist. Would you like to search live online databases instead?
+                  "{searchQuery}" was not found in your tracker. Would you like to search online API lists?
                 </p>
               </div>
               <button
@@ -1411,10 +1870,10 @@ export default function Home() {
                   setModalSearchQuery(searchQuery);
                   setIsModalOpen(true);
                 }}
-                className="px-5 py-3 bg-indigo-500 hover:bg-indigo-605 text-white text-xs font-bold rounded-xl transition-all shadow-lg flex items-center gap-1.5 min-h-[44px]"
+                className="px-5 py-3 bg-[#ff2e43] hover:bg-[#e02034] text-white text-xs font-bold rounded-xl transition-all shadow-lg flex items-center gap-1.5 min-h-[44px]"
               >
                 <Plus className="w-4 h-4" />
-                Search "{searchQuery}" Online
+                Add Media
               </button>
             </div>
           )}
@@ -1422,38 +1881,38 @@ export default function Home() {
         </section>
 
         {/* ========================================================================= */}
-        {/* MOBILE-ONLY UX TAB SCREENS (Direct bottom-navigation views for consumer) */}
+        {/* MOBILE-ONLY UX SCREENS                                                    */}
         {/* ========================================================================= */}
 
-        {/* Mobile Tab: Upcoming Airing Calendar Timeline */}
+        {/* Airing Calendar Timeline Screen */}
         <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "CALENDAR" ? "block animate-in fade-in duration-200" : "hidden"}`}>
-          <div className="flex items-center justify-between border-b border-slate-900 pb-3">
+          <div className="flex items-center justify-between border-b border-[#1f212a] pb-3">
             <div>
               <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
-                <Tv className="w-4 h-4 text-fuchsia-400" />
+                <Tv className="w-4 h-4 text-[#ff2e43]" />
                 Airing Calendar
               </h2>
-              <p className="text-[9px] text-slate-500 mt-0.5 font-medium">Personalized countdown schedules</p>
+              <p className="text-[9px] text-slate-550 mt-0.5 font-medium">Watchlist schedules synced dynamically</p>
             </div>
-            <span className="text-[8px] bg-fuchsia-950/40 border border-fuchsia-500/20 text-fuchsia-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">JST / Local</span>
+            <span className="text-[8px] bg-[#ff2e43]/10 border border-[#ff2e43]/20 text-[#ff2e43] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest">Local / JST</span>
           </div>
 
           {airingCalendar.length > 0 ? (
-            <div className="space-y-3.5">
+            <div className="space-y-4">
               {airingCalendar.map((entry) => (
-                <div key={entry.id} className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 flex gap-4 items-start shadow-lg backdrop-blur-sm">
-                  <div className="flex-shrink-0 w-11 h-16 bg-slate-800 rounded-lg overflow-hidden border border-slate-800">
+                <div key={entry.id} className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-4 flex gap-4 items-start shadow-md">
+                  <div className="flex-shrink-0 w-12 h-18 bg-slate-900 rounded-lg overflow-hidden border border-[#1f212a]">
                     <img src={mediaList.find(m => m.id === entry.id)?.coverImage} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start gap-1">
-                      <h4 className="text-xs font-extrabold text-slate-200 line-clamp-1">{entry.title}</h4>
-                      <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.5 bg-indigo-950 border border-indigo-500/20 text-indigo-400 rounded-lg flex-shrink-0">
+                      <h4 className="text-xs font-bold text-slate-200 line-clamp-1">{entry.title}</h4>
+                      <span className="text-[8px] font-extrabold uppercase px-2 py-0.5 bg-[#ff2e43]/10 border border-[#ff2e43]/20 text-[#ff2e43] rounded-md flex-shrink-0">
                         {entry.schedule.timeLabel}
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5 mt-2">
-                      <Clock className="w-3.5 h-3.5 text-fuchsia-400 flex-shrink-0" />
+                    <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5 mt-3">
+                      <Clock className="w-3.5 h-3.5 text-[#ff2e43] flex-shrink-0" />
                       {entry.schedule.details}
                     </p>
                   </div>
@@ -1461,43 +1920,43 @@ export default function Home() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-12 bg-slate-900/20 border border-dashed border-slate-800 rounded-3xl flex flex-col items-center gap-2">
-              <Clock className="w-7 h-7 text-slate-700" />
-              <p className="text-xs font-bold text-slate-400 px-4">No releasing items tracked</p>
+            <div className="text-center py-12 bg-[#0f1015]/40 border border-dashed border-[#1f212a] rounded-3xl flex flex-col items-center gap-2">
+              <Clock className="w-8 h-8 text-slate-700 animate-pulse" />
+              <p className="text-xs font-bold text-slate-400 px-4">No ongoing watchlist items</p>
               <p className="text-[9px] text-slate-600 px-6 max-w-xs leading-normal">
-                Add an ongoing Anime or Manga series from the Discover tab to sync schedules automatically!
+                Add an ongoing Anime or Manga series from the Discover catalog to populate live airing alerts.
               </p>
             </div>
           )}
         </div>
 
-        {/* Mobile Tab: Discover & API Add Screen (Instant In-line UX) */}
+        {/* Discover API Add Screen (Instant search on mobile) */}
         <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "DISCOVER" ? "block animate-in fade-in duration-200" : "hidden"}`}>
-          <div className="border-b border-slate-900 pb-3">
+          <div className="border-b border-[#1f212a] pb-3">
             <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
-              <Search className="w-4 h-4 text-indigo-400" />
+              <Search className="w-4 h-4 text-[#ff2e43]" />
               Discover Media
             </h2>
-            <p className="text-[9px] text-slate-500 mt-0.5 font-medium">Lookup global AniList anime/manga & TMDB catalogs</p>
+            <p className="text-[9px] text-slate-550 mt-0.5 font-medium">Sync directly with AniList and TMDB APIs</p>
           </div>
 
-          {/* Search Controls Card */}
-          <div className="flex flex-col gap-3 p-3.5 bg-slate-900/40 border border-slate-800/80 rounded-2xl">
+          {/* Search Controls */}
+          <div className="flex flex-col gap-3 p-4 bg-[#0f1015] border border-[#1f212a] rounded-2xl">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-450" />
               <input
                 type="text"
-                placeholder="Search live online databases... (e.g. Solo Leveling)"
+                placeholder="Search series or novels..."
                 value={modalSearchQuery}
                 onChange={(e) => setModalSearchQuery(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 text-xs rounded-xl pl-9 pr-3.5 py-3 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-all font-semibold"
+                className="w-full bg-[#050608] border border-[#1f212a] text-xs rounded-xl pl-9 pr-3.5 py-3 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
               />
             </div>
 
             <select
               value={selectedMediaType}
               onChange={(e) => setSelectedMediaType(e.target.value as any)}
-              className="w-full bg-slate-950 border border-slate-800 text-xs rounded-xl px-3 py-2.5 text-slate-355 font-bold"
+              className="w-full bg-[#050608] border border-[#1f212a] text-xs rounded-xl px-3 py-2.5 text-slate-350 font-bold"
             >
               <option value="ALL">All Categories</option>
               <option value="ANIME">Anime (Live AniList)</option>
@@ -1510,34 +1969,34 @@ export default function Home() {
           {/* Search Results Ledger */}
           <div className="space-y-3">
             {isLoadingSearch ? (
-              <div className="text-center py-16 text-indigo-400 flex flex-col items-center justify-center gap-2.5">
-                <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                <p className="text-[9px] font-bold text-slate-400">Searching third-party APIs...</p>
+              <div className="text-center py-16 text-[#ff2e43] flex flex-col items-center justify-center gap-2.5">
+                <div className="w-6 h-6 border-4 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
+                <p className="text-[9px] font-bold text-slate-400">Querying live APIs...</p>
               </div>
             ) : searchResults.length > 0 ? (
               searchResults.map((result) => (
-                <div 
-                  key={result.id}
-                  className="flex gap-3.5 p-3 bg-slate-900/30 border border-slate-900 rounded-2xl items-center"
+                <div
+                  key={`mobile-search-${result.id}`}
+                  className="flex gap-3.5 p-3.5 bg-[#0f1015] border border-[#1f212a] rounded-2xl items-center"
                 >
-                  <div className="w-12 h-18 bg-slate-800 rounded-lg overflow-hidden flex-shrink-0 border border-slate-800">
+                  <div className="w-12 h-18 bg-slate-900 rounded-lg overflow-hidden flex-shrink-0 border border-[#1f212a]/50">
                     <img src={result.coverImage} alt={result.title} className="w-full h-full object-cover" />
                   </div>
-                  
+
                   <div className="flex-1 min-w-0 flex flex-col justify-between h-18 py-0.5">
                     <div>
                       <div className="flex justify-between items-start gap-1">
-                        <h4 className="text-[10px] font-extrabold text-slate-200 line-clamp-1">{result.title}</h4>
-                        <span className="text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-indigo-950/60 border border-indigo-500/20 text-indigo-400 rounded-full flex-shrink-0">{result.type}</span>
+                        <h4 className="text-[10px] font-bold text-slate-200 line-clamp-1">{result.title}</h4>
+                        <span className="text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#ff2e43]/15 border border-[#ff2e43]/20 text-[#ff2e43] rounded-full flex-shrink-0">{result.type}</span>
                       </div>
-                      <p className="text-[8px] text-slate-500 font-bold uppercase tracking-wider mt-0.5 line-clamp-1">{result.franchise}</p>
+                      <p className="text-[8px] text-slate-550 font-bold uppercase tracking-wider mt-0.5 truncate">{result.franchise}</p>
                     </div>
-                    
-                    <div className="flex justify-between items-center mt-auto pt-1 border-t border-slate-850/20">
+
+                    <div className="flex justify-between items-center mt-auto pt-1 border-t border-[#1f212a]/30">
                       <span className="text-[8px] text-slate-400 font-medium">{result.totalProgress} {result.progressType}s</span>
                       <button
                         onClick={() => handleAddMedia(result)}
-                        className="py-1 px-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-[9px] font-bold transition-all shadow-md active:scale-95 flex items-center gap-1"
+                        className="py-1 px-3 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-lg text-[9px] font-bold transition-all flex items-center gap-1 active:scale-95 shadow-md"
                       >
                         <Plus className="w-3 h-3" />
                         Track
@@ -1548,231 +2007,212 @@ export default function Home() {
               ))
             ) : (
               <div className="text-center py-12 text-slate-500 flex flex-col items-center gap-2">
-                <Search className="w-7 h-7 text-slate-700" />
-                <p className="text-xs font-semibold text-slate-400">Search online database</p>
+                <Search className="w-7 h-7 text-slate-700 animate-pulse" />
+                <p className="text-xs font-semibold text-slate-400">Search online catalogs</p>
                 <p className="text-[9px] text-slate-600 leading-normal px-8">
-                  Lookup items directly from universal API providers to auto-populate summaries and airing schedules!
+                  Query databases dynamically. Simply type show, manga, or movie title above.
                 </p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Mobile Tab: Consumer-Focused App Sync & Settings */}
+        {/* Mobile Settings, Analytics & Sync state */}
         <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "STATS" ? "block animate-in fade-in duration-200" : "hidden"}`}>
-          <div className="border-b border-slate-900 pb-3">
+          <div className="border-b border-[#1f212a] pb-3">
             <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
-              <Layers className="w-4 h-4 text-fuchsia-400" />
-              Settings & Clusters
+              <Activity className="w-4 h-4 text-[#ff2e43]" />
+              Ledger Metrics
             </h2>
-            <p className="text-[9px] text-slate-500 mt-0.5 font-medium">Watchlist sync state and visual clustering stats</p>
+            <p className="text-[9px] text-slate-550 mt-0.5 font-medium">Watchlist profiles, sync clusters and logs</p>
           </div>
 
-          {/* Watch & Read Analytics Card (Mobile) */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md">
-            <div className="flex items-center gap-2 text-indigo-400 mb-3">
-              <TrendingUp className="w-4.5 h-4.5" />
-              <h4 className="text-xs font-bold uppercase tracking-wider">Your Analytics</h4>
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div className="bg-slate-950/40 p-2.5 border border-slate-800/80 rounded-xl text-center">
-                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Watch Time</p>
-                <p className="text-base font-extrabold text-indigo-300 mt-0.5">{totalWatchHours} hrs</p>
+          {/* User profile segment */}
+          <div className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#1f212a] flex items-center justify-center text-slate-300">
+                <User className="w-5 h-5 text-[#ff2e43]" />
               </div>
-              <div className="bg-slate-950/40 p-2.5 border border-slate-800/80 rounded-xl text-center">
-                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Read Time</p>
-                <p className="text-base font-extrabold text-emerald-300 mt-0.5">{totalReadHours} hrs</p>
+              <div>
+                <h4 className="text-xs font-bold text-slate-205">{user?.username}</h4>
+                <p className="text-[9px] text-slate-550 font-bold uppercase tracking-wider mt-0.5">{user?.email}</p>
               </div>
             </div>
-            <div className="bg-indigo-950/20 p-2.5 border border-indigo-500/10 rounded-xl flex items-center justify-between text-xs">
-              <span className="text-slate-400 font-medium">Total Time Spent</span>
-              <span className="font-bold text-indigo-400">{(totalWatchHours + totalReadHours).toFixed(1)} hrs</span>
+            <span className="text-[8px] bg-indigo-950 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full font-bold uppercase">Active Watcher</span>
+          </div>
+
+          {/* Watch & Read Analytics Card */}
+          <div className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-4">
+            <div className="flex items-center gap-2 text-slate-350 mb-4.5">
+              <TrendingUp className="w-4 h-4 text-[#ff2e43]" />
+              <h4 className="text-xs font-extrabold uppercase tracking-wider">Dashboard Analytics</h4>
+            </div>
+            <div className="grid grid-cols-3 gap-2.5 mb-3">
+              <div className="bg-[#050608] border border-[#1f212a] p-3 rounded-xl text-center">
+                <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Watched</p>
+                <p className="text-base font-black text-slate-200 mt-0.5">{totalWatchHours}h</p>
+              </div>
+              <div className="bg-[#050608] border border-[#1f212a] p-3 rounded-xl text-center">
+                <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Read</p>
+                <p className="text-base font-black text-slate-200 mt-0.5">{totalReadHours}h</p>
+              </div>
+              <div className="bg-[#050608] border border-[#1f212a] p-3 rounded-xl text-center">
+                <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Completed</p>
+                <p className="text-base font-black text-emerald-400 mt-0.5">{completedCount}</p>
+              </div>
+            </div>
+            <div className="bg-[#050608] border border-[#1f212a] p-3 rounded-xl flex items-center justify-between text-xs font-semibold">
+              <span className="text-slate-500">Total Tracking Invested</span>
+              <span className="font-extrabold text-[#ff2e43]">{(totalWatchHours + totalReadHours).toFixed(1)} Hours</span>
             </div>
           </div>
 
           {/* Sync Connection Status */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md flex items-center justify-between">
+          <div className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-4 shadow-md flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Database className="w-5 h-5 text-indigo-400 flex-shrink-0" />
               <div>
-                <h4 className="text-xs font-bold text-slate-200">Supabase Cloud Storage</h4>
-                <p className="text-[9px] text-slate-500 mt-0.5">{dbConnected ? "Synced: Active & Secure" : "Local Database Mode Active"}</p>
+                <h4 className="text-xs font-bold text-slate-200">Supabase Cloud Ledger</h4>
+                <p className="text-[9px] text-slate-500 mt-0.5">{dbConnected ? "Linked securely: REST Sync active" : "Local Database backup active"}</p>
               </div>
             </div>
-            <span className={`text-[8px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
-              dbConnected 
-                ? "bg-emerald-950 text-emerald-400 border border-emerald-500/20" 
+            <span className={`text-[8px] font-extrabold uppercase px-2 py-0.5 rounded-full ${dbConnected
+                ? "bg-emerald-950 text-emerald-400 border border-emerald-500/20"
                 : "bg-amber-950 text-amber-400 border border-amber-500/20"
-            }`}>
-              {dbConnected ? "Online" : "API Setup"}
+              }`}>
+              {dbConnected ? "Connected" : "Local Mode"}
             </span>
           </div>
 
-          {/* Grouped Franchise Statistics */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3.5">
-            <div>
-              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-indigo-400" />
-                Grouped Franchises
-              </h3>
-              <p className="text-[9px] text-slate-400 mt-1 leading-normal">
-                Our schema connects separate seasons, movies, and novels into cohesive clusters, identifying gaps between releases.
-              </p>
-            </div>
-            
-            <div className="space-y-2 pt-1">
-              <div className="bg-slate-950/60 px-3.5 py-2.5 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs">
-                <span className="text-slate-350 font-medium">Demon Slayer Cluster</span>
-                <span className="text-[9px] font-bold text-indigo-400">2 Ledger Cards</span>
-              </div>
-              <div className="bg-slate-950/60 px-3.5 py-2.5 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs">
-                <span className="text-slate-350 font-medium">Jujutsu Kaisen Cluster</span>
-                <span className="text-[9px] font-bold text-indigo-400">2 Ledger Cards</span>
-              </div>
-            </div>
-          </div>
 
-          {/* Quick Guide */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-2.5">
-            <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              Watchlist Guide
-            </h3>
-            <ul className="text-[10px] text-slate-400 space-y-2 list-disc pl-4 leading-relaxed font-medium">
-              <li>Use the **Discover** tab to search and add media instantly without leaving the main dashboard page.</li>
-              <li>Tap **Increment** on list cards to add progress with simple clicks.</li>
-              <li>Toggle progress input fields by tapping the edit pencil icon at the side of progress counters.</li>
-            </ul>
-          </div>
 
-          {/* Mobile Sign Out Button */}
+          {/* Quick settings cogs trigger */}
+          <button
+            onClick={() => {
+              setCustomApiUrl(localStorage.getItem("UMT_API_URL") || getApiBaseUrl());
+              setIsSettingsOpen(true);
+            }}
+            className="w-full py-3.5 bg-[#1f212a] hover:bg-[#2b2e3b] text-white border border-[#2b2e3b] rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95"
+          >
+            <Settings className="w-4 h-4" />
+            Backend Connection Settings
+          </button>
+
+          {/* Mobile Sign Out */}
           <button
             onClick={handleLogout}
-            className="w-full py-3.5 bg-red-950/20 hover:bg-red-950/30 border border-red-500/20 hover:border-red-500/35 text-xs font-bold rounded-xl text-red-400 transition-all flex items-center justify-center gap-2 min-h-[44px] mt-4 active:scale-95 bg-slate-900/60"
+            className="w-full py-3.5 bg-red-950/20 hover:bg-[#ff2e43]/10 border border-[#ff2e43]/20 text-xs font-extrabold rounded-xl text-[#ff2e43] transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <LogOut className="w-4 h-4" />
             Sign Out of Account
           </button>
 
         </div>
 
-        {/* SIDE PANEL (Order-2: Pushed cleanly below the watchlist on mobile viewports) */}
+        {/* ========================================================================= */}
+        {/* 3. SIDE PANEL DESKTOP METRICS (Order-2: Sidebar)                         */}
+        {/* ========================================================================= */}
         <aside className="hidden lg:flex lg:col-span-1 flex-col gap-6 order-2 lg:order-1">
-          
-          {/* Watch & Read Analytics Card */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 backdrop-blur-sm">
-            <div className="flex items-center gap-2 text-indigo-400 mb-3.5">
-              <TrendingUp className="w-5 h-5" />
-              <h2 className="text-sm font-semibold uppercase tracking-wider">Your Analytics</h2>
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-slate-950/40 p-3 border border-slate-800/80 rounded-xl text-center">
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Watch Time</p>
-                <p className="text-lg font-extrabold text-indigo-300 mt-1">{totalWatchHours} hrs</p>
-              </div>
-              <div className="bg-slate-950/40 p-3 border border-slate-800/80 rounded-xl text-center">
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Read Time</p>
-                <p className="text-lg font-extrabold text-emerald-300 mt-1">{totalReadHours} hrs</p>
-              </div>
-            </div>
-            <div className="bg-indigo-950/20 p-3 border border-indigo-500/10 rounded-xl flex items-center justify-between text-xs">
-              <span className="text-slate-400 font-medium">Total Time Spent</span>
-              <span className="font-bold text-indigo-400">{(totalWatchHours + totalReadHours).toFixed(1)} hrs</span>
-            </div>
-          </div>
 
-          {/* Franchise Clustering Info Box */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 backdrop-blur-sm">
-            <div className="flex items-center gap-2 text-indigo-400 mb-3.5">
-              <Layers className="w-5 h-5" />
-              <h2 className="text-sm font-semibold uppercase tracking-wider">Grouped Franchises</h2>
+          {/* Watch & Read Analytics Card */}
+          <div className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center gap-2 text-slate-300 mb-4">
+              <TrendingUp className="w-4 h-4 text-[#ff2e43]" />
+              <h2 className="text-xs font-bold uppercase tracking-wider">Ledger Analytics</h2>
             </div>
-            <p className="text-xs text-slate-400 leading-relaxed mb-4">
-              Our schema relationally links manga, anime seasons, and live-action spin-offs into a single cluster. Toggling cards reveals comparing statistics.
-            </p>
-            <div className="space-y-3">
-              <div className="bg-slate-950/40 p-3 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs">
-                <span className="text-slate-300 font-medium">Demon Slayer</span>
-                <span className="px-2 py-0.5 bg-indigo-950 border border-indigo-500/20 text-indigo-400 rounded-full font-bold">2 Cards Linked</span>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="bg-[#050608] border border-[#1f212a] p-3.5 rounded-xl text-center">
+                <p className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wider">Watch Time</p>
+                <p className="text-lg font-black text-slate-205 mt-1">{totalWatchHours}h</p>
               </div>
-              <div className="bg-slate-950/40 p-3 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs">
-                <span className="text-slate-300 font-medium">Jujutsu Kaisen</span>
-                <span className="px-2 py-0.5 bg-indigo-950 border border-indigo-500/20 text-indigo-400 rounded-full font-bold">2 Cards Linked</span>
+              <div className="bg-[#050608] border border-[#1f212a] p-3.5 rounded-xl text-center">
+                <p className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wider">Read Time</p>
+                <p className="text-lg font-black text-slate-205 mt-1">{totalReadHours}h</p>
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="col-span-2 bg-[#050608] border border-[#1f212a] p-3 rounded-xl flex items-center justify-between text-xs font-semibold">
+                <span className="text-slate-500">Completed Entries</span>
+                <span className="font-extrabold text-emerald-400">{completedCount} titles</span>
+              </div>
+            </div>
+            <div className="bg-[#050608] border border-[#1f212a] p-3 rounded-xl flex items-center justify-between text-xs font-semibold">
+              <span className="text-slate-500">Total Tracking Invested</span>
+              <span className="font-extrabold text-[#ff2e43]">{(totalWatchHours + totalReadHours).toFixed(1)} hrs</span>
             </div>
           </div>
 
           {/* Airing Schedule Calendar (Personalized Watchlist-Bound Calendar) */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 backdrop-blur-sm">
+          <div className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2 text-fuchsia-400">
+              <div className="flex items-center gap-2 text-[#ff2e43]">
                 <Tv className="w-5 h-5" />
-                <h2 className="text-sm font-semibold uppercase tracking-wider">Airing Calendar</h2>
+                <h2 className="text-xs font-bold uppercase tracking-wider">Airing Calendar</h2>
               </div>
-              <span className="text-[10px] bg-fuchsia-950/40 border border-fuchsia-500/20 text-fuchsia-400 px-2 py-0.5 rounded-full font-bold">UTC / JST</span>
+              <span className="text-[9px] bg-[#ff2e43]/10 border border-[#ff2e43]/20 text-[#ff2e43] px-2.5 py-0.5 rounded-full font-bold uppercase">JST / Local</span>
             </div>
-            
+
             {airingCalendar.length > 0 ? (
               <div className="space-y-4 animate-in fade-in duration-200">
                 {airingCalendar.map((entry) => (
-                  <div key={entry.id} className="flex gap-3 border-l-2 border-indigo-500/40 pl-3">
-                    <div className="text-[10px] font-extrabold text-indigo-400 min-w-[55px] uppercase tracking-wide">
+                  <div key={`desktop-calendar-${entry.id}`} className="flex gap-3 border-l-2 border-[#ff2e43]/40 pl-3">
+                    <div className="text-[9px] font-black text-[#ff2e43] min-w-[55px] uppercase tracking-wide mt-0.5">
                       {entry.schedule.timeLabel}
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-slate-200 line-clamp-1">{entry.title}</h4>
-                      <p className="text-[9px] text-slate-400 font-medium flex items-center gap-1 mt-0.5 leading-relaxed">
-                        <Clock className="w-3 h-3 text-fuchsia-400 flex-shrink-0" /> {entry.schedule.details}
+                      <p className="text-[9px] text-slate-450 font-semibold flex items-center gap-1 mt-1 leading-relaxed">
+                        <Clock className="w-3.5 h-3.5 text-[#ff2e43] flex-shrink-0" /> {entry.schedule.details}
                       </p>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-6 text-slate-500 border border-dashed border-slate-850 rounded-xl flex flex-col items-center gap-1.5">
-                <Clock className="w-6 h-6 text-slate-700" />
-                <p className="text-[10px] font-bold text-slate-400 leading-normal px-4">
-                  No releasing media on your watchlist.
+              <div className="text-center py-8 text-slate-500 border border-dashed border-[#1f212a] rounded-2xl flex flex-col items-center gap-2">
+                <Clock className="w-6 h-6 text-[#1f212a] animate-pulse" />
+                <p className="text-[10px] font-bold text-slate-450 leading-normal px-4">
+                  No releasing media on watchlist
                 </p>
                 <p className="text-[9px] text-slate-600 px-4">
-                  Add an ongoing Anime or Manga to sync schedules automatically!
+                  Add ongoing anime or TV shows from Discover to sync release countdowns.
                 </p>
               </div>
             )}
           </div>
 
-          {/* Webhook Preparation / Extension Connection Info hidden for clean UI */}
+
 
         </aside>
 
       </main>
 
       {/* FOOTER SYSTEM METADATA */}
-      <footer className="border-t border-slate-900/80 bg-slate-950/60 mt-16 px-4 py-6 text-center text-xs text-slate-500 font-medium">
-        <p>© 2026 Universal Media Tracker. All Rights Reserved. Production-ready Next.js App.</p>
+      <footer className="border-t border-[#1f212a] bg-[#050608] mt-16 px-4 py-8 text-center text-xs text-slate-650 font-bold uppercase tracking-wider">
+        <p>© 2026 BingeLog Media Tracker. Powered by AniList & TMDB API providers.</p>
       </footer>
 
-      <div className="md:hidden fixed bottom-4 left-4 right-4 z-40 bg-slate-950/80 border border-slate-800 p-2.5 rounded-2xl flex justify-around shadow-2xl items-center backdrop-blur-md">
+      {/* Mobile Floating Bottom Bar */}
+      <div className="md:hidden fixed bottom-4 left-4 right-4 z-40 bg-[#0f1015]/90 border border-[#1f212a] p-2.5 rounded-2xl flex justify-around shadow-2xl items-center backdrop-blur-md">
         {[
-          { id: "LIST", label: "My List", icon: BookOpen },
+          { id: "LIST", label: "My Ledger", icon: BookOpen },
           { id: "CALENDAR", label: "Airing", icon: Tv },
           { id: "DISCOVER", label: "Discover", icon: Search },
-          { id: "STATS", label: "Settings", icon: Layers }
+          { id: "STATS", label: "Analytics", icon: Layers }
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = mobileActiveTab === tab.id;
           return (
             <button
-              key={tab.id}
+              key={`bottom-nav-${tab.id}`}
               onClick={() => setMobileActiveTab(tab.id as any)}
-              className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all relative ${
-                isActive ? "text-indigo-400 font-bold" : "text-slate-500 hover:text-slate-350"
-              }`}
+              className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all relative ${isActive ? "text-[#ff2e43] font-bold" : "text-slate-500 hover:text-slate-300"
+                }`}
             >
-              <Icon className="w-5 h-5 flex-shrink-0" />
-              <span className="text-[9px] mt-1 font-semibold tracking-wide">{tab.label}</span>
+              <Icon className="w-5 h-5 flex-shrink-0 animate-in fade-in" />
+              <span className="text-[9px] mt-1 font-bold tracking-wider uppercase">{tab.label}</span>
               {isActive && (
-                <span className="absolute bottom-0 w-4 h-0.5 bg-indigo-500 rounded-full animate-pulse" />
+                <span className="absolute bottom-0 w-4 h-0.5 bg-[#ff2e43] rounded-full" />
               )}
             </button>
           );

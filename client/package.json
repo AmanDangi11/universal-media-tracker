@@ -8,11 +8,14 @@
     "start": "next start",
     "lint": "eslint",
     "app:build": "next build && npx cap sync",
+    "app:open:android": "npx cap open android",
+    "app:open:ios": "npx cap open ios",
     "app:open": "npx cap open android"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",
     "@capacitor/core": "^8.3.4",
+    "@capacitor/ios": "^8.3.4",
     "@tanstack/react-query": "^5.100.14",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
