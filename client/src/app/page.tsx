@@ -1450,25 +1450,14 @@ export default function Home() {
               <div>
                 <h1 className="text-base font-black tracking-tight text-white flex items-center gap-1.5">
                   Binge<span className="text-[#ff2e43]">Log</span>
-                  <span className={`w-2 h-2 rounded-full ${dbConnected ? "bg-emerald-500 shadow-lg shadow-emerald-500/50" : "bg-amber-500"}`} />
                 </h1>
-                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Unified Entertainment Ledger</p>
+                <p className="text-[9px] text-slate-550 font-bold uppercase tracking-wider">Unified Entertainment Ledger</p>
               </div>
             </div>
           </div>
 
           {/* Mobile Right Controls */}
           <div className="flex items-center gap-2 md:hidden">
-            <button
-              onClick={() => {
-                setCustomApiUrl(localStorage.getItem("UMT_API_URL") || getApiBaseUrl());
-                setIsSettingsOpen(true);
-              }}
-              className="p-2 bg-[#0f1015] border border-[#1f212a] hover:bg-[#1f212a] text-slate-400 hover:text-slate-200 rounded-xl transition-all shadow-md active:scale-95"
-              title="Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
             <button
               onClick={() => setIsModalOpen(true)}
               className="p-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl transition-all shadow-md active:scale-95 shadow-[#ff2e43]/25"
@@ -1504,20 +1493,7 @@ export default function Home() {
             </button>
           )}
 
-          {/* Desktop Settings Button */}
-          {user && (
-            <button
-              onClick={() => {
-                setCustomApiUrl(localStorage.getItem("UMT_API_URL") || getApiBaseUrl());
-                setIsSettingsOpen(true);
-              }}
-              className="hidden md:flex items-center gap-1.5 px-3.5 py-2 bg-[#0f1015] border border-[#1f212a] hover:border-[#ff2e43]/30 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all active:scale-95"
-              title="App Settings"
-            >
-              <Settings className="w-4 h-4" />
-              Settings
-            </button>
-          )}
+
 
           {/* Profile Card / Sign Out */}
           {user && (
@@ -1885,7 +1861,7 @@ export default function Home() {
         {/* ========================================================================= */}
 
         {/* Airing Calendar Timeline Screen */}
-        <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "CALENDAR" ? "block animate-in fade-in duration-200" : "hidden"}`}>
+        <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "CALENDAR" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
           <div className="flex items-center justify-between border-b border-[#1f212a] pb-3">
             <div>
               <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
@@ -1931,7 +1907,7 @@ export default function Home() {
         </div>
 
         {/* Discover API Add Screen (Instant search on mobile) */}
-        <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "DISCOVER" ? "block animate-in fade-in duration-200" : "hidden"}`}>
+        <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "DISCOVER" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
           <div className="border-b border-[#1f212a] pb-3">
             <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
               <Search className="w-4 h-4 text-[#ff2e43]" />
@@ -2018,7 +1994,7 @@ export default function Home() {
         </div>
 
         {/* Mobile Settings, Analytics & Sync state */}
-        <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "STATS" ? "block animate-in fade-in duration-200" : "hidden"}`}>
+        <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "STATS" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
           <div className="border-b border-[#1f212a] pb-3">
             <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
               <Activity className="w-4 h-4 text-[#ff2e43]" />
@@ -2066,37 +2042,6 @@ export default function Home() {
               <span className="font-extrabold text-[#ff2e43]">{(totalWatchHours + totalReadHours).toFixed(1)} Hours</span>
             </div>
           </div>
-
-          {/* Sync Connection Status */}
-          <div className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-4 shadow-md flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Database className="w-5 h-5 text-indigo-400 flex-shrink-0" />
-              <div>
-                <h4 className="text-xs font-bold text-slate-200">Supabase Cloud Ledger</h4>
-                <p className="text-[9px] text-slate-500 mt-0.5">{dbConnected ? "Linked securely: REST Sync active" : "Local Database backup active"}</p>
-              </div>
-            </div>
-            <span className={`text-[8px] font-extrabold uppercase px-2 py-0.5 rounded-full ${dbConnected
-                ? "bg-emerald-950 text-emerald-400 border border-emerald-500/20"
-                : "bg-amber-950 text-amber-400 border border-amber-500/20"
-              }`}>
-              {dbConnected ? "Connected" : "Local Mode"}
-            </span>
-          </div>
-
-
-
-          {/* Quick settings cogs trigger */}
-          <button
-            onClick={() => {
-              setCustomApiUrl(localStorage.getItem("UMT_API_URL") || getApiBaseUrl());
-              setIsSettingsOpen(true);
-            }}
-            className="w-full py-3.5 bg-[#1f212a] hover:bg-[#2b2e3b] text-white border border-[#2b2e3b] rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95"
-          >
-            <Settings className="w-4 h-4" />
-            Backend Connection Settings
-          </button>
 
           {/* Mobile Sign Out */}
           <button
