@@ -249,6 +249,19 @@ app.post('/api/watchlist/add', authenticateToken, async (req: AuthenticatedReque
                 resolvedTotalEpisodes = response.data.length;
               }
             }
+          } else if ((externalId.startsWith('imdb-tv-') || externalId.startsWith('imdb-')) && type === 'TV_SHOW') {
+            const imdbId = externalId.replace('imdb-tv-', '').replace('imdb-', '');
+            // Query TVmaze lookup by IMDb ID
+            const lookupUrl = `https://api.tvmaze.com/lookup/shows?imdb=${imdbId}`;
+            const lookupResponse = await axios.get(lookupUrl, { timeout: 5000 });
+            const showId = lookupResponse.data?.id;
+            if (showId) {
+              const episodesUrl = `https://api.tvmaze.com/shows/${showId}/episodes`;
+              const episodesResponse = await axios.get(episodesUrl, { timeout: 5000 });
+              if (Array.isArray(episodesResponse.data)) {
+                resolvedTotalEpisodes = episodesResponse.data.length;
+              }
+            }
           } else if ((type === 'MANGA' || type === 'LIGHT_NOVEL')) {
             // Attempt to scrape Arena Scans for actual chapter count
             const slug = title.toLowerCase()
@@ -508,106 +521,64 @@ app.get('/api/search', async (req: Request, res: Response) => {
       }
     }
 
-    // 2. Otherwise, use 100% free, dynamic keyless APIs (TVmaze for TV shows, YTS for movies)
+    // 2. Otherwise, use 100% free, dynamic keyless APIs (IMDb Search API for movies and TV shows)
     let dynamicResults: any[] = [];
 
-    // Search TVmaze API for TV Shows
-    if (type === 'ALL' || type === 'TV_SHOW') {
-      try {
-        const tvmazeUrl = `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(q)}`;
-        const tvResponse = await axios.get(tvmazeUrl);
-        const tvShows = tvResponse.data || [];
-        
-        const topShows = tvShows.slice(0, 2);
-        const remainingShows = tvShows.slice(2, 6);
-        const expandedResults: any[] = [];
+    try {
+      const imdbUrl = `https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(q)}`;
+      const imdbResponse = await axios.get(imdbUrl, { timeout: 5000 });
+      const items = imdbResponse.data?.description || [];
 
-        await Promise.all(topShows.map(async (item: any) => {
-          const show = item.show || {};
-          // 1. Add the main show entry
-          expandedResults.push({
-            id: `tvmaze-${show.id}`,
-            type: 'TV_SHOW' as const,
-            title: `${show.name} (All Seasons)`,
-            franchise: `${show.name} Franchise`,
-            coverImage: show.image?.medium || show.image?.original || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
-            synopsis: show.summary ? show.summary.replace(/<[^>]*>/g, "") : 'No synopsis available.',
-            totalProgress: 12,
-            progressType: 'episode' as const
-          });
-
-          // 2. Fetch and add individual seasons
-          try {
-            const seasonsUrl = `https://api.tvmaze.com/shows/${show.id}/seasons`;
-            const seasonsResponse = await axios.get(seasonsUrl, { timeout: 3000 });
-            const seasons = seasonsResponse.data || [];
-            
-            seasons.forEach((season: any) => {
-              if (season.episodeOrder && season.episodeOrder > 0) {
-                expandedResults.push({
-                  id: `tvmaze-season-${season.id}`,
-                  type: 'TV_SHOW' as const,
-                  title: `${show.name} - Season ${season.number}`,
-                  franchise: `${show.name} Franchise`,
-                  coverImage: season.image?.medium || show.image?.medium || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
-                  synopsis: `Season ${season.number} of ${show.name}. Contains ${season.episodeOrder} episodes.`,
-                  totalProgress: season.episodeOrder,
-                  progressType: 'episode' as const
-                });
-              }
-            });
-          } catch (err) {
-            console.error(`Failed to fetch seasons for TVmaze show ${show.id}:`, err);
-          }
+      if (type === 'TV_SHOW') {
+        dynamicResults = items.slice(0, 10).map((show: any) => ({
+          id: `imdb-tv-${show['#IMDB_ID']}`,
+          type: 'TV_SHOW' as const,
+          title: show['#TITLE'] || 'Unknown Show',
+          franchise: `${show['#TITLE'] || 'Unknown'} Franchise`,
+          coverImage: show['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+          synopsis: `Year: ${show['#YEAR'] || 'N/A'}. Starring: ${show['#ACTORS'] || 'N/A'}. AKA: ${show['#AKA'] || 'N/A'}.`,
+          totalProgress: 12, // Default, will resolve on watchlist add
+          progressType: 'episode' as const
         }));
-
-        const mappedRemaining = remainingShows.map((item: any) => {
-          const show = item.show || {};
-          return {
-            id: `tvmaze-${show.id}`,
-            type: 'TV_SHOW' as const,
-            title: show.name || 'Unknown Show',
-            franchise: `${show.name || 'Unknown'} Franchise`,
-            coverImage: show.image?.medium || show.image?.original || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
-            synopsis: show.summary ? show.summary.replace(/<[^>]*>/g, "") : 'No synopsis available.',
-            totalProgress: 12,
-            progressType: 'episode' as const
-          };
-        });
-
-        dynamicResults = [...dynamicResults, ...expandedResults, ...mappedRemaining];
-      } catch (err) {
-        console.error("TVmaze API fetch failed:", err);
-      }
-    }
-
-    // Search IMDb-OT API for Movies
-    if (type === 'ALL' || type === 'MOVIE') {
-      try {
-        const imdbUrl = `https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(q)}`;
-        const movieResponse = await axios.get(imdbUrl, { timeout: 5000 });
-        const movies = movieResponse.data?.description || [];
-        
-        const mappedMovies = movies.slice(0, 8).map((movie: any) => ({
-          id: `imdb-${movie['#IMDB_ID']}`,
+      } else if (type === 'MOVIE') {
+        dynamicResults = items.slice(0, 10).map((movie: any) => ({
+          id: `imdb-movie-${movie['#IMDB_ID']}`,
           type: 'MOVIE' as const,
           title: movie['#TITLE'] || 'Unknown Movie',
           franchise: `${movie['#TITLE'] || 'Unknown'} Franchise`,
           coverImage: movie['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
-          synopsis: `Year: ${movie['#YEAR']}. Starring: ${movie['#ACTORS'] || 'N/A'}. AKA: ${movie['#AKA'] || 'N/A'}.`,
+          synopsis: `Year: ${movie['#YEAR'] || 'N/A'}. Starring: ${movie['#ACTORS'] || 'N/A'}. AKA: ${movie['#AKA'] || 'N/A'}.`,
           totalProgress: 1,
           progressType: 'episode' as const
         }));
-        
-        dynamicResults = [...dynamicResults, ...mappedMovies];
-      } catch (err) {
-        console.error("IMDb Search API fetch failed:", err);
-      }
-    }
+      } else if (type === 'ALL') {
+        // Return both mapped shows and mapped movies
+        const mappedShows = items.slice(0, 5).map((show: any) => ({
+          id: `imdb-tv-${show['#IMDB_ID']}`,
+          type: 'TV_SHOW' as const,
+          title: `${show['#TITLE']} (Series)`,
+          franchise: `${show['#TITLE'] || 'Unknown'} Franchise`,
+          coverImage: show['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+          synopsis: `Year: ${show['#YEAR'] || 'N/A'}. Starring: ${show['#ACTORS'] || 'N/A'}. AKA: ${show['#AKA'] || 'N/A'}.`,
+          totalProgress: 12,
+          progressType: 'episode' as const
+        }));
 
-    // Strict type filter to guarantee absolute isolation
-    if (type !== 'ALL') {
-      dynamicResults = dynamicResults.filter(item => item.type === type);
+        const mappedMovies = items.slice(0, 5).map((movie: any) => ({
+          id: `imdb-movie-${movie['#IMDB_ID']}`,
+          type: 'MOVIE' as const,
+          title: `${movie['#TITLE']} (Movie)`,
+          franchise: `${movie['#TITLE'] || 'Unknown'} Franchise`,
+          coverImage: movie['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
+          synopsis: `Year: ${movie['#YEAR'] || 'N/A'}. Starring: ${movie['#ACTORS'] || 'N/A'}. AKA: ${movie['#AKA'] || 'N/A'}.`,
+          totalProgress: 1,
+          progressType: 'episode' as const
+        }));
+
+        dynamicResults = [...mappedShows, ...mappedMovies];
+      }
+    } catch (err) {
+      console.error("IMDb Search API fetch failed:", err);
     }
 
     return res.json(dynamicResults);
