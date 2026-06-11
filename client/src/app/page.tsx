@@ -999,7 +999,7 @@ export default function Home() {
                   placeholder="Enter username"
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
-                  className="w-full bg-[#050608] border border-[#1f212a] text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                  className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
                   autoComplete="username"
                   required
                 />
@@ -1013,7 +1013,7 @@ export default function Home() {
                 placeholder="Enter email address"
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
-                className="w-full bg-[#050608] border border-[#1f212a] text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
                 autoComplete="email"
                 required
               />
@@ -1026,7 +1026,7 @@ export default function Home() {
                 placeholder="Enter password"
                 value={passwordInput}
                 onChange={(e) => setPasswordInput(e.target.value)}
-                className="w-full bg-[#050608] border border-[#1f212a] text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
                 autoComplete={isRegistering ? "new-password" : "current-password"}
                 required
               />
@@ -1105,7 +1105,7 @@ export default function Home() {
                   placeholder="http://localhost:5000"
                   value={customApiUrl}
                   onChange={(e) => setCustomApiUrl(e.target.value)}
-                  className="w-full bg-[#050608] border border-[#1f212a] text-sm rounded-xl px-4 py-3 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-mono"
+                  className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-sm rounded-xl px-4 py-3 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-mono"
                 />
                 <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
                   Default autodetected. For Android emulators, use <code className="text-slate-450 font-mono">http://10.0.2.2:5000</code>. For local network physical devices, use your computer's local IP (e.g. <code className="text-slate-450 font-mono">http://192.168.1.50:5000</code>).
@@ -1165,7 +1165,7 @@ export default function Home() {
                   placeholder="Search live online databases... (e.g. Solo Leveling, Game of Thrones)"
                   value={modalSearchQuery}
                   onChange={(e) => setModalSearchQuery(e.target.value)}
-                  className="w-full bg-[#0f1015] border border-[#1f212a] text-sm rounded-xl pl-10 pr-4 py-3 sm:py-2.5 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                  className="w-full bg-[#0f1015] border border-[#1f212a] text-base md:text-sm rounded-xl pl-10 pr-4 py-3 sm:py-2.5 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
                 />
               </div>
 
@@ -1173,7 +1173,7 @@ export default function Home() {
               <select
                 value={selectedMediaType}
                 onChange={(e) => setSelectedMediaType(e.target.value as any)}
-                className="bg-[#0f1015] border border-[#1f212a] text-sm rounded-xl px-4 py-3 sm:py-2.5 text-slate-300 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                className="bg-[#0f1015] border border-[#1f212a] text-base md:text-sm rounded-xl px-4 py-3 sm:py-2.5 text-slate-300 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
               >
                 <option value="ALL">All Categories</option>
                 <option value="ANIME">Anime (Live AniList)</option>
@@ -1419,7 +1419,7 @@ export default function Home() {
                         max={detailsItem.totalProgress}
                         value={customValue}
                         onChange={(e) => setCustomValue(e.target.value)}
-                        className="w-20 bg-[#0f1015] border border-[#1f212a] rounded-xl px-3 py-2 text-center text-sm font-bold text-[#ff2e43] focus:outline-none focus:border-[#ff2e43]"
+                        className="w-20 bg-[#0f1015] border border-[#1f212a] rounded-xl px-3 py-2 text-center text-base md:text-sm font-bold text-[#ff2e43] focus:outline-none focus:border-[#ff2e43]"
                       />
                       <button
                         onClick={() => handleSaveCustomProgress(detailsItem.id, detailsItem.totalProgress, detailsItem.progressType)}
@@ -1489,7 +1489,7 @@ export default function Home() {
               placeholder="Search watchlist..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#0f1015] border border-[#1f212a] text-xs rounded-xl pl-9 pr-3.5 py-2 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+              className="w-full bg-[#0f1015] border border-[#1f212a] text-base md:text-xs rounded-xl pl-9 pr-3.5 py-2 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
             />
           </div>
 
@@ -1764,7 +1764,7 @@ export default function Home() {
                                   placeholder={item.currentProgress.toString()}
                                   value={customValue}
                                   onChange={(e) => setCustomValue(e.target.value)}
-                                  className="w-14 bg-[#050608] border border-[#1f212a] rounded px-1.5 py-0.5 text-xs text-center focus:outline-none focus:border-[#ff2e43] text-[#ff2e43] font-bold"
+                                  className="w-14 bg-[#050608] border border-[#1f212a] rounded px-1.5 py-0.5 text-base md:text-xs text-center focus:outline-none focus:border-[#ff2e43] text-[#ff2e43] font-bold"
                                   autoFocus
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter") handleSaveCustomProgress(item.id, item.totalProgress, item.progressType);
@@ -1949,14 +1949,14 @@ export default function Home() {
                 placeholder="Search series or novels..."
                 value={modalSearchQuery}
                 onChange={(e) => setModalSearchQuery(e.target.value)}
-                className="w-full bg-[#050608] border border-[#1f212a] text-xs rounded-xl pl-9 pr-3.5 py-3 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl pl-9 pr-3.5 py-3 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
               />
             </div>
 
             <select
               value={selectedMediaType}
               onChange={(e) => setSelectedMediaType(e.target.value as any)}
-              className="w-full bg-[#050608] border border-[#1f212a] text-xs rounded-xl px-3 py-2.5 text-slate-350 font-bold"
+              className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-3 py-2.5 text-slate-355 font-bold"
             >
               <option value="ALL">All Categories</option>
               <option value="ANIME">Anime (Live AniList)</option>
