@@ -179,6 +179,9 @@ interface AiringSchedule {
 }
 
 const getApiBaseUrl = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
   if (typeof window !== "undefined") {
     const savedUrl = localStorage.getItem("UMT_API_URL");
     if (savedUrl) {
@@ -196,9 +199,6 @@ const getApiBaseUrl = () => {
       return "https://ad35b38df0678b.lhr.life";
     }
     return `http://${window.location.hostname}:5000`;
-  }
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
   }
   return "http://localhost:5000";
 };
