@@ -1275,166 +1275,194 @@ export default function Home() {
     return renderLoader(true);
   }
 
+  // Define unified style overrides targeting all crimson accents, buttons, inputs, logos, and scrolls
+  const dynamicStyles = `
+    :root {
+      --background: ${THEMES[activeTheme].background};
+      --foreground: ${THEMES[activeTheme].foreground};
+      --color-card-bg: ${THEMES[activeTheme].cardBg};
+      --color-card-border: ${THEMES[activeTheme].cardBorder};
+      --color-accent-red: ${THEMES[activeTheme].accent};
+    }
+    
+    .bg-\[\#050608\] { background-color: var(--background) !important; }
+    .bg-\[\#0f1015\] { background-color: var(--color-card-bg) !important; }
+    .bg-\[\#0f1015\]\/80 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.8) !important; }
+    .bg-\[\#0f1015\]\/50 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.5) !important; }
+    .bg-\[\#0f1015\]\/40 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.4) !important; }
+    
+    .border-\[\#1f212a\] { border-color: var(--color-card-border) !important; }
+    .border-\[\#1f212a\]\/50 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.5) !important; }
+    .border-\[\#1f212a\]\/30 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.3) !important; }
+    
+    .hover\:bg-\[\#1f212a\]:hover { background-color: var(--color-card-border) !important; }
+    .hover\:bg-\[\#2b2e3b\]:hover { background-color: ${THEMES[activeTheme].hoverBg} !important; }
+    
+    .bg-\[\#ff2e43\] { background-color: var(--color-accent-red) !important; }
+    .bg-\[\#ff2e43\]\/5 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.05) !important; }
+    .bg-\[\#ff2e43\]\/10 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
+    .bg-\[\#ff2e43\]\/15 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
+    .bg-\[\#ff2e43\]\/20 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    .bg-\[\#ff2e43\]\/25 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+    .bg-\[\#ff2e43\]\/30 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+    .bg-\[\#ff2e43\]\/40 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.4) !important; }
+    .bg-\[\#ff2e43\]\/50 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    .hover\:bg-\[\#ff2e43\]\/10:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
+    .hover\:bg-\[\#ff2e43\]\/20:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    
+    .text-\[\#ff2e43\] { color: var(--color-accent-red) !important; }
+    .hover\:text-\[\#ff2e43\]:hover { color: var(--color-accent-red) !important; }
+    .group:hover .group-hover\:text-\[\#ff2e43\] { color: var(--color-accent-red) !important; }
+    
+    .border-\[\#ff2e43\]\/20 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    .border-\[\#ff2e43\]\/25 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+    .border-\[\#ff2e43\]\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+    .border-\[\#ff2e43\]\/40 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.4) !important; }
+    .border-\[\#ff2e43\]\/50 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    
+    .hover\:border-\[\#ff2e43\]\/20:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    .hover\:border-\[\#ff2e43\]\/25:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+    .hover\:border-\[\#ff2e43\]\/30:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+    .hover\:border-\[\#ff2e43\]\/50:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    .focus\:border-\[\#ff2e43\]\/50:focus { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    
+    .shadow-\[\#ff2e43\]\/5 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.05) !important; }
+    .shadow-\[\#ff2e43\]\/10 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
+    .shadow-\[\#ff2e43\]\/15 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
+    .shadow-\[\#ff2e43\]\/20 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    .shadow-\[\#ff2e43\]\/25 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+    .shadow-\[\#ff2e43\]\/30 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+    .shadow-\[\#ff2e43\]\/50 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    
+    .hover\:bg-\[\#e02034\]:hover { background-color: ${THEMES[activeTheme].accentHover} !important; }
+    .selection\:bg-\[\#ff2e43\]::selection { background-color: var(--color-accent-red) !important; }
+    
+    .bg-red-950\/20 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.08) !important; }
+    .border-red-900\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+    .hover\:bg-\[\#ff2e43\]\/10:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
+    .hover\:border-red-950:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    
+    ::-webkit-scrollbar-thumb {
+      background: var(--color-card-border) !important;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: ${THEMES[activeTheme].hoverBg} !important;
+    }
+  `;
+
   // IF USER IS NOT LOGGED IN, RENDER AUTHENTICATION VIEW (Trakt style cinematic dark login)
   if (!token) {
     return (
-      <div className="min-h-screen text-[#f3f4f6] flex items-center justify-center p-4 relative font-sans selection:bg-[#ff2e43] selection:text-white overflow-hidden bg-[#050608]">
-        {/* Ambient background glows */}
-        <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-[#ff2e43]/5 rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-500/5 rounded-full blur-[140px] pointer-events-none" />
+      <>
+        <style>{dynamicStyles}</style>
+        <div className="min-h-screen text-[#f3f4f6] flex items-center justify-center p-4 relative font-sans selection:bg-[#ff2e43] selection:text-white overflow-hidden bg-[#050608]">
+          {/* Ambient background glows */}
+          <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-[#ff2e43]/5 rounded-full blur-[140px] pointer-events-none" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-500/5 rounded-full blur-[140px] pointer-events-none" />
 
-        <div className="w-full max-w-md bg-[#0f1015]/80 border border-[#1f212a] rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
-          {/* Top Brand Banner */}
-          <div className="flex flex-col items-center text-center gap-3 mb-8">
-            <div className="p-3 bg-[#ff2e43] rounded-2xl shadow-lg shadow-[#ff2e43]/20 animate-pulse">
-              <Play className="w-6 h-6 text-white fill-white ml-0.5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black tracking-tight text-white flex items-center justify-center gap-1">
-                Binge<span className="text-[#ff2e43]">Log</span>
-              </h1>
-              <p className="text-xs text-slate-400 mt-1 font-semibold uppercase tracking-wider">Cinematic Entertainment Ledger</p>
-            </div>
-          </div>
-
-          {/* Form Content */}
-          <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-[#ff2e43] mb-2">
-              {isRegistering ? "Create Account" : "Access Watchlist"}
-            </h2>
-
-            {authError && (
-              <div className="p-3 bg-red-950/20 border border-[#ff2e43]/30 text-[#ff2e43] text-xs font-semibold rounded-xl">
-                ⚠️ {authError}
+          <div className="w-full max-w-md bg-[#0f1015]/80 border border-[#1f212a] rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
+            {/* Top Brand Banner */}
+            <div className="flex flex-col items-center text-center gap-3 mb-8">
+              <div className="p-3 bg-[#ff2e43] rounded-2xl shadow-lg shadow-[#ff2e43]/20 animate-pulse">
+                <Play className="w-6 h-6 text-white fill-white ml-0.5" />
               </div>
-            )}
+              <div>
+                <h1 className="text-2xl font-black tracking-tight text-white flex items-center justify-center gap-1">
+                  Binge<span className="text-[#ff2e43]">Log</span>
+                </h1>
+                <p className="text-xs text-slate-400 mt-1 font-semibold uppercase tracking-wider">Cinematic Entertainment Ledger</p>
+              </div>
+            </div>
 
-            {isRegistering && (
+            {/* Form Content */}
+            <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
+              <h2 className="text-xs font-bold uppercase tracking-widest text-[#ff2e43] mb-2">
+                {isRegistering ? "Create Account" : "Access Watchlist"}
+              </h2>
+
+              {authError && (
+                <div className="p-3 bg-red-950/20 border border-[#ff2e43]/30 text-[#ff2e43] text-xs font-semibold rounded-xl">
+                  ⚠️ {authError}
+                </div>
+              )}
+
+              {isRegistering && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-slate-400">Username</label>
+                  <input
+                    type="text"
+                    placeholder="Enter username"
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value)}
+                    className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                    autoComplete="username"
+                    required
+                  />
+                </div>
+              )}
+
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Username</label>
+                <label className="text-[10px] uppercase font-bold text-slate-400">Email Address</label>
                 <input
-                  type="text"
-                  placeholder="Enter username"
-                  value={usernameInput}
-                  onChange={(e) => setUsernameInput(e.target.value)}
+                  type="email"
+                  placeholder="Enter email address"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
                   className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                  autoComplete="username"
+                  autoComplete="email"
                   required
                 />
               </div>
-            )}
 
-            <div className="space-y-1.5">
-              <label className="text-[10px] uppercase font-bold text-slate-400">Email Address</label>
-              <input
-                type="email"
-                placeholder="Enter email address"
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                autoComplete="email"
-                required
-              />
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-slate-400">Password</label>
+                <input
+                  type="password"
+                  placeholder="Enter password"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                  autoComplete={isRegistering ? "new-password" : "current-password"}
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full py-3.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-[#ff2e43]/20 active:scale-95 flex items-center justify-center gap-2 min-h-[44px] mt-6"
+              >
+                {authLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : isRegistering ? (
+                  "Create Free Account"
+                ) : (
+                  "Sign In"
+                )}
+              </button>
+            </form>
+
+            {/* Form Switcher */}
+            <div className="mt-6 pt-4 border-t border-[#1f212a] text-center">
+              <button
+                onClick={() => {
+                  setIsRegistering(!isRegistering);
+                  setAuthError("");
+                }}
+                className="text-[11px] font-bold text-slate-400 hover:text-[#ff2e43] transition-all"
+              >
+                {isRegistering ? "Already have an account? Sign In" : "Don't have an account yet? Register here"}
+              </button>
             </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] uppercase font-bold text-slate-400">Password</label>
-              <input
-                type="password"
-                placeholder="Enter password"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                autoComplete={isRegistering ? "new-password" : "current-password"}
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={authLoading}
-              className="w-full py-3.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-[#ff2e43]/20 active:scale-95 flex items-center justify-center gap-2 min-h-[44px] mt-6"
-            >
-              {authLoading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : isRegistering ? (
-                "Create Free Account"
-              ) : (
-                "Sign In"
-              )}
-            </button>
-          </form>
-
-          {/* Form Switcher */}
-          <div className="mt-6 pt-4 border-t border-[#1f212a] text-center">
-            <button
-              onClick={() => {
-                setIsRegistering(!isRegistering);
-                setAuthError("");
-              }}
-              className="text-[11px] font-bold text-slate-400 hover:text-[#ff2e43] transition-all"
-            >
-              {isRegistering ? "Already have an account? Sign In" : "Don't have an account yet? Register here"}
-            </button>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#050608] text-[#f3f4f6] font-sans selection:bg-[#ff2e43] selection:text-white overflow-x-hidden pb-12">
-      <style>{`
-        :root {
-          --background: ${THEMES[activeTheme].background};
-          --foreground: ${THEMES[activeTheme].foreground};
-          --color-card-bg: ${THEMES[activeTheme].cardBg};
-          --color-card-border: ${THEMES[activeTheme].cardBorder};
-          --color-accent-red: ${THEMES[activeTheme].accent};
-        }
-        
-        .bg-\[\#050608\] { background-color: var(--background) !important; }
-        .bg-\[\#0f1015\] { background-color: var(--color-card-bg) !important; }
-        .bg-\[\#0f1015\]\/80 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.8) !important; }
-        .bg-\[\#0f1015\]\/50 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.5) !important; }
-        .bg-\[\#0f1015\]\/40 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.4) !important; }
-        
-        .border-\[\#1f212a\] { border-color: var(--color-card-border) !important; }
-        .border-\[\#1f212a\]\/50 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.5) !important; }
-        .border-\[\#1f212a\]\/30 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.3) !important; }
-        
-        .hover\:bg-\[\#1f212a\]:hover { background-color: var(--color-card-border) !important; }
-        .hover\:bg-\[\#2b2e3b\]:hover { background-color: ${THEMES[activeTheme].hoverBg} !important; }
-        
-        .bg-\[\#ff2e43\] { background-color: var(--color-accent-red) !important; }
-        .bg-\[\#ff2e43\]\/10 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
-        .bg-\[\#ff2e43\]\/15 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
-        .text-\[\#ff2e43\] { color: var(--color-accent-red) !important; }
-        .border-\[\#ff2e43\]\/20 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
-        .border-\[\#ff2e43\]\/25 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-        .border-\[\#ff2e43\]\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-        .hover\:border-\[\#ff2e43\]\/25:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-        .hover\:border-\[\#ff2e43\]\/30:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-        .shadow-\[\#ff2e43\]\/20 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
-        .shadow-\[\#ff2e43\]\/15 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
-        .shadow-\[\#ff2e43\]\/25 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-        .shadow-\[\#ff2e43\]\/10 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
-        
-        .hover\:bg-\[\#e02034\]:hover { background-color: ${THEMES[activeTheme].accentHover} !important; }
-        .hover\:text-\[\#ff2e43\]:hover { color: var(--color-accent-red) !important; }
-        .selection\:bg-\[\#ff2e43\]::selection { background-color: var(--color-accent-red) !important; }
-        
-        .bg-red-950\/20 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.08) !important; }
-        .border-red-900\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-        .hover\:bg-\[\#ff2e43\]\/10:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
-        
-        ::-webkit-scrollbar-thumb {
-          background: var(--color-card-border) !important;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: ${THEMES[activeTheme].hoverBg} !important;
-        }
-      `}</style>
+      <style>{dynamicStyles}</style>
 
       {/* Floating Webhook Progress Notification Card */}
       {showNotification && (
