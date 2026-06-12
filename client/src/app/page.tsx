@@ -1285,63 +1285,63 @@ export default function Home() {
       --color-accent-red: ${THEMES[activeTheme].accent};
     }
     
-    .bg-\[\#050608\] { background-color: var(--background) !important; }
-    .bg-\[\#0f1015\] { background-color: var(--color-card-bg) !important; }
-    .bg-\[\#0f1015\]\/80 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.8) !important; }
-    .bg-\[\#0f1015\]\/50 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.5) !important; }
-    .bg-\[\#0f1015\]\/40 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.4) !important; }
+    .bg-\\[\\#050608\\] { background-color: var(--background) !important; }
+    .bg-\\[\\#0f1015\\] { background-color: var(--color-card-bg) !important; }
+    .bg-\\[\\#0f1015\\]\\/80 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.8) !important; }
+    .bg-\\[\\#0f1015\\]\\/50 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.5) !important; }
+    .bg-\\[\\#0f1015\\]\\/40 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.4) !important; }
     
-    .border-\[\#1f212a\] { border-color: var(--color-card-border) !important; }
-    .border-\[\#1f212a\]\/50 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.5) !important; }
-    .border-\[\#1f212a\]\/30 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.3) !important; }
+    .border-\\[\\#1f212a\\] { border-color: var(--color-card-border) !important; }
+    .border-\\[\\#1f212a\\]\\/50 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.5) !important; }
+    .border-\\[\\#1f212a\\]\\/30 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.3) !important; }
     
-    .hover\:bg-\[\#1f212a\]:hover { background-color: var(--color-card-border) !important; }
-    .hover\:bg-\[\#2b2e3b\]:hover { background-color: ${THEMES[activeTheme].hoverBg} !important; }
+    .hover\\:bg-\\[\\#1f212a\\]:hover { background-color: var(--color-card-border) !important; }
+    .hover\\:bg-\\[\\#2b2e3b\\]:hover { background-color: ${THEMES[activeTheme].hoverBg} !important; }
     
-    .bg-\[\#ff2e43\] { background-color: var(--color-accent-red) !important; }
-    .bg-\[\#ff2e43\]\/5 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.05) !important; }
-    .bg-\[\#ff2e43\]\/10 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
-    .bg-\[\#ff2e43\]\/15 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
-    .bg-\[\#ff2e43\]\/20 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
-    .bg-\[\#ff2e43\]\/25 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-    .bg-\[\#ff2e43\]\/30 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-    .bg-\[\#ff2e43\]\/40 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.4) !important; }
-    .bg-\[\#ff2e43\]\/50 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
-    .hover\:bg-\[\#ff2e43\]\/10:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
-    .hover\:bg-\[\#ff2e43\]\/20:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    .bg-\\[\\#ff2e43\\] { background-color: var(--color-accent-red) !important; }
+    .bg-\\[\\#ff2e43\\]\\/5 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.05) !important; }
+    .bg-\\[\\#ff2e43\\]\\/10 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
+    .bg-\\[\\#ff2e43\\]\\/15 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
+    .bg-\\[\\#ff2e43\\]\\/20 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    .bg-\\[\\#ff2e43\\]\\/25 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+    .bg-\\[\\#ff2e43\\]\\/30 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+    .bg-\\[\\#ff2e43\\]\\/40 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.4) !important; }
+    .bg-\\[\\#ff2e43\\]\\/50 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    .hover\\:bg-\\[\\#ff2e43\\]\\/10:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
+    .hover\\:bg-\\[\\#ff2e43\\]\\/20:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
     
-    .text-\[\#ff2e43\] { color: var(--color-accent-red) !important; }
-    .hover\:text-\[\#ff2e43\]:hover { color: var(--color-accent-red) !important; }
-    .group:hover .group-hover\:text-\[\#ff2e43\] { color: var(--color-accent-red) !important; }
+    .text-\\[\\#ff2e43\\] { color: var(--color-accent-red) !important; }
+    .hover\\:text-\\[\\#ff2e43\\]:hover { color: var(--color-accent-red) !important; }
+    .group:hover .group-hover\\:text-\\[\\#ff2e43\\] { color: var(--color-accent-red) !important; }
     
-    .border-\[\#ff2e43\]\/20 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
-    .border-\[\#ff2e43\]\/25 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-    .border-\[\#ff2e43\]\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-    .border-\[\#ff2e43\]\/40 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.4) !important; }
-    .border-\[\#ff2e43\]\/50 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    .border-\\[\\#ff2e43\\]\\/20 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    .border-\\[\\#ff2e43\\]\\/25 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+    .border-\\[\\#ff2e43\\]\\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+    .border-\\[\\#ff2e43\\]\\/40 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.4) !important; }
+    .border-\\[\\#ff2e43\\]\\/50 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
     
-    .hover\:border-\[\#ff2e43\]\/20:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
-    .hover\:border-\[\#ff2e43\]\/25:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-    .hover\:border-\[\#ff2e43\]\/30:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-    .hover\:border-\[\#ff2e43\]\/50:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
-    .focus\:border-\[\#ff2e43\]\/50:focus { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    .hover\\:border-\\[\\#ff2e43\\]\\/20:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    .hover\\:border-\\[\\#ff2e43\\]\\/25:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+    .hover\\:border-\\[\\#ff2e43\\]\\/30:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+    .hover\\:border-\\[\\#ff2e43\\]\\/50:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    .focus\\:border-\\[\\#ff2e43\\]\\/50:focus { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
     
-    .shadow-\[\#ff2e43\]\/5 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.05) !important; }
-    .shadow-\[\#ff2e43\]\/10 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
-    .shadow-\[\#ff2e43\]\/15 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
-    .shadow-\[\#ff2e43\]\/20 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
-    .shadow-\[\#ff2e43\]\/25 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-    .shadow-\[\#ff2e43\]\/30 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-    .shadow-\[\#ff2e43\]\/50 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/5 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.05) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/10 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/15 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/20 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    .shadow-\\[\\--tw-shadow-color] { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/25 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/30 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/50 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
     
-    .hover\:bg-\[\#e02034\]:hover { background-color: ${THEMES[activeTheme].accentHover} !important; }
-    .selection\:bg-\[\#ff2e43\]::selection { background-color: var(--color-accent-red) !important; }
+    .hover\\:bg-\\[\\#e02034\\]:hover { background-color: ${THEMES[activeTheme].accentHover} !important; }
+    .selection\\:bg-\\[\\#ff2e43\\]::selection { background-color: var(--color-accent-red) !important; }
     
-    .bg-red-950\/20 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.08) !important; }
-    .border-red-900\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-    .hover\:bg-\[\#ff2e43\]\/10:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
-    .hover\:border-red-950:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
-    
+    .bg-red-950\\/20 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.08) !important; }
+    .border-red-900\\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+    .hover\\:bg-\\[\\#ff2e43\\]\\/10:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
+    .hover\\:border-red-950:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
     ::-webkit-scrollbar-thumb {
       background: var(--color-card-border) !important;
     }
