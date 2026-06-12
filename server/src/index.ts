@@ -468,6 +468,36 @@ app.post('/api/watchlist/update', authenticateToken, async (req: AuthenticatedRe
   }
 });
 
+// Delete Media item from Watchlist
+app.delete('/api/watchlist/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Progress record ID is required' });
+    }
+
+    // Find progress record and verify ownership
+    const progress = await prisma.userMediaProgress.findUnique({
+      where: { id }
+    });
+
+    if (!progress || progress.userId !== req.userId) {
+      return res.status(404).json({ error: 'Watchlist record not found' });
+    }
+
+    // Delete progress record (cascade handles related history items)
+    await prisma.userMediaProgress.delete({
+      where: { id }
+    });
+
+    res.status(200).json({ message: 'Media removed from watchlist successfully' });
+  } catch (error) {
+    console.error('Deleting media failed:', error);
+    res.status(500).json({ error: 'Failed to delete media from watchlist' });
+  }
+});
+
 // Health check endpoint
 app.get('/health', async (_req: Request, res: Response) => {
   try {

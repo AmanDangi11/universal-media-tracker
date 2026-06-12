@@ -28,7 +28,9 @@ import {
   Settings,
   Activity,
   LogOut,
-  User
+  User,
+  Trash2,
+  Puzzle
 } from "lucide-react";
 
 // Types
@@ -882,6 +884,37 @@ export default function Home() {
     );
   };
 
+  const handleDeleteMedia = async (id: string) => {
+    if (!token) return;
+    if (!window.confirm("Are you sure you want to delete this media from your watchlist?")) return;
+
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/watchlist/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        setMediaList((prev) => prev.filter((item) => item.id !== id));
+        setSelectedDetailsItem(null);
+        setNotificationMsg("Media removed from watchlist");
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
+      } else {
+        const err = await res.json();
+        setNotificationMsg(err.error || "Failed to delete media");
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
+      }
+    } catch (err) {
+      console.error("Failed to delete media:", err);
+      setNotificationMsg("Failed to delete media");
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 3000);
+    }
+  };
+
   // Adds a searched item from AniList / TMDB catalogs to the ledger
   const handleAddMedia = (result: SearchResult) => {
     if (mediaList.some((item) => item.title === result.title)) {
@@ -955,9 +988,6 @@ export default function Home() {
           setTimeout(() => setShowNotification(false), 3000);
         });
     }
-
-    setIsModalOpen(false);
-    setModalSearchQuery("");
   };
 
   const filteredMedia = mediaList.filter((item) => {
@@ -1105,8 +1135,7 @@ export default function Home() {
           <span className="text-xs font-semibold">{notificationMsg}</span>
         </div>
       )}
-
-      {/* APP SETTINGS MODAL */}
+      {/* EXTENSION MANAGEMENT MODAL */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
           <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
@@ -1114,8 +1143,8 @@ export default function Home() {
             {/* Header */}
             <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
               <div className="flex items-center gap-2">
-                <Settings className="w-5 h-5 text-[#ff2e43]" />
-                <h2 className="text-base font-bold text-slate-100">App Settings</h2>
+                <Puzzle className="w-5 h-5 text-[#ff2e43]" />
+                <h2 className="text-base font-bold text-slate-100">Extension Management</h2>
               </div>
               <button
                 onClick={() => setIsSettingsOpen(false)}
@@ -1126,25 +1155,9 @@ export default function Home() {
             </div>
 
             {/* Content */}
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                  Backend API URL
-                </label>
-                <input
-                  type="text"
-                  placeholder="http://localhost:5000"
-                  value={customApiUrl}
-                  onChange={(e) => setCustomApiUrl(e.target.value)}
-                  className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-sm rounded-xl px-4 py-3 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-mono"
-                />
-                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
-                  Default autodetected. For Android emulators, use <code className="text-slate-450 font-mono">http://10.0.2.2:5000</code>. For local network physical devices, use your computer's local IP (e.g. <code className="text-slate-450 font-mono">http://192.168.1.50:5000</code>).
-                </p>
-              </div>
-
-              <div className="border-t border-[#1f212a] pt-4 mt-2">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5">
                   Chrome Extension Auto-Sync
                 </label>
                 <a
@@ -1154,32 +1167,36 @@ export default function Home() {
                 >
                   <span>📥 Download Extension (.zip)</span>
                 </a>
-                <div className="mt-3.5 space-y-1.5 text-[10px] text-slate-550 leading-relaxed font-semibold">
-                  <p className="font-extrabold text-slate-400 uppercase tracking-wider text-[9px] mb-1">Manual Installation Steps:</p>
-                  <p>1. Extract the downloaded <code className="text-slate-450 font-mono">extension.zip</code> file.</p>
-                  <p>2. Open <code className="text-slate-450 font-mono">chrome://extensions/</code> in Google Chrome.</p>
-                  <p>3. Toggle <strong className="text-slate-400 font-bold">Developer mode</strong> (top-right switch) to ON.</p>
-                  <p>4. Click <strong className="text-slate-400 font-bold">Load unpacked</strong> (top-left) and select the extracted folder.</p>
+              </div>
+
+              <div className="border-t border-[#1f212a] pt-4">
+                <p className="font-extrabold text-slate-400 uppercase tracking-wider text-[9px] mb-2">Manual Installation Steps:</p>
+                <div className="space-y-1.5 text-[10px] text-slate-350 leading-relaxed font-medium">
+                  <p>1. Extract the downloaded <code className="text-slate-400 font-mono">extension.zip</code> file.</p>
+                  <p>2. Open <code className="text-slate-400 font-mono">chrome://extensions/</code> in Google Chrome.</p>
+                  <p>3. Toggle <strong className="text-slate-200 font-bold">Developer mode</strong> (top-right switch) to ON.</p>
+                  <p>4. Click <strong className="text-slate-200 font-bold">Load unpacked</strong> (top-left) and select the extracted folder.</p>
                 </div>
+              </div>
+
+              <div className="border-t border-[#1f212a] pt-4">
+                <p className="font-extrabold text-slate-400 uppercase tracking-wider text-[9px] mb-2">How to Use & Sync:</p>
+                <ul className="space-y-2 text-[10px] text-slate-300 leading-relaxed font-medium list-disc list-inside">
+                  <li>Ensure you are logged into this web application. The extension automatically syncs your session token from local storage.</li>
+                  <li>When watching anime or media on supported sites (<strong className="text-slate-200">Crunchyroll, animepahe.pw, animesuge.cz, 9anime.org.lv</strong>), progress will track automatically.</li>
+                  <li>If the series isn't in your watchlist, a toast will prompt you to add it instantly.</li>
+                  <li>When you watch more than <strong className="text-[#ff2e43]">85%</strong> of an episode, progress increments automatically in the background.</li>
+                </ul>
               </div>
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-end gap-2.5 px-6">
+            <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-end px-6">
               <button
-                onClick={() => {
-                  setCustomApiUrl("");
-                  handleSaveSettings("");
-                }}
-                className="px-4 py-2.5 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all"
+                onClick={() => setIsSettingsOpen(false)}
+                className="px-5 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
               >
-                Reset Default
-              </button>
-              <button
-                onClick={() => handleSaveSettings(customApiUrl)}
-                className="px-4 py-2.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md"
-              >
-                Save & Apply
+                Close
               </button>
             </div>
 
@@ -1265,13 +1282,20 @@ export default function Home() {
 
                       <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-[#1f212a]">
                         <span className="text-[10px] text-slate-550 font-medium">Released: {result.totalProgress} {result.progressType}s</span>
-                        <button
-                          onClick={() => handleAddMedia(result)}
-                          className="py-1.5 px-4 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-95"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Track Media
-                        </button>
+                        {mediaList.some((item) => item.title.toLowerCase() === result.title.toLowerCase()) ? (
+                          <div className="py-1.5 px-4 bg-emerald-955/20 border border-emerald-500/30 text-emerald-450 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-default">
+                            <Check className="w-3.5 h-3.5 text-emerald-450" />
+                            Added
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleAddMedia(result)}
+                            className="py-1.5 px-4 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-95"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Track Media
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1455,6 +1479,14 @@ export default function Home() {
                     >
                       <RotateCcw className="w-4 h-4" />
                     </button>
+
+                    <button
+                      onClick={() => handleDeleteMedia(detailsItem.id)}
+                      className="p-3 bg-red-950/20 border border-red-900/30 hover:bg-[#ff2e43]/10 text-[#ff2e43] rounded-xl transition-all min-h-[42px] flex items-center justify-center active:scale-95"
+                      title="Delete from Watchlist"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
 
                   {/* Manual entry field inside Modal */}
@@ -1556,9 +1588,9 @@ export default function Home() {
               <button
                 onClick={() => setIsSettingsOpen(true)}
                 className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-slate-100 hover:border-slate-800 rounded-xl transition-all active:scale-95"
-                title="App Settings"
+                title="Extension Management"
               >
-                <Settings className="w-4 h-4" />
+                <Puzzle className="w-4 h-4" />
               </button>
               <button
                 onClick={handleLogout}
@@ -2038,13 +2070,20 @@ export default function Home() {
 
                     <div className="flex justify-between items-center mt-auto pt-1 border-t border-[#1f212a]/30">
                       <span className="text-[8px] text-slate-400 font-medium">{result.totalProgress} {result.progressType}s</span>
-                      <button
-                        onClick={() => handleAddMedia(result)}
-                        className="py-1 px-3 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-lg text-[9px] font-bold transition-all flex items-center gap-1 active:scale-95 shadow-md"
-                      >
-                        <Plus className="w-3 h-3" />
-                        Track
-                      </button>
+                      {mediaList.some((item) => item.title.toLowerCase() === result.title.toLowerCase()) ? (
+                        <div className="py-1 px-3 bg-emerald-955/20 border border-emerald-500/30 text-emerald-450 rounded-lg text-[9px] font-bold flex items-center gap-1 cursor-default">
+                          <Check className="w-3 h-3 text-emerald-450" />
+                          Added
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleAddMedia(result)}
+                          className="py-1 px-3 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-lg text-[9px] font-bold transition-all flex items-center gap-1 active:scale-95 shadow-md"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Track
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2116,8 +2155,8 @@ export default function Home() {
             onClick={() => setIsSettingsOpen(true)}
             className="w-full py-3.5 bg-[#0f1015] hover:bg-[#1f212a] border border-[#1f212a] text-xs font-extrabold rounded-xl text-slate-300 transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
           >
-            <Settings className="w-4 h-4" />
-            Extension & App Settings
+            <Puzzle className="w-4 h-4" />
+            Extension Management
           </button>
 
           {/* Mobile Sign Out */}
