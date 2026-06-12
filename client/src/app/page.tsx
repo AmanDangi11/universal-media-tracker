@@ -205,8 +205,32 @@ const getApiBaseUrl = () => {
   return "http://localhost:5000";
 };
 
+const LOADERS_DATA = [
+  {
+    text: "Dino-mite! Rex is marching...",
+    subtext: "Running through the database timeline (🦖)"
+  },
+  {
+    text: "Cat-ching your media updates...",
+    subtext: "Whisker-ing database logs into place (ニャー)"
+  },
+  {
+    text: "Summoning anime magic...",
+    subtext: "Casting sparkles and updating grids (🪄✨)"
+  },
+  {
+    text: "Inserting coin... Loading ledger!",
+    subtext: "Powering up pixel arcade systems (👾)"
+  },
+  {
+    text: "Brewing fresh Boba tea...",
+    subtext: "Steeping database records (🥤✨)"
+  }
+];
+
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
+  const [loaderIndex, setLoaderIndex] = useState(0);
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [isLoadingWatchlist, setIsLoadingWatchlist] = useState(true);
   const [activeTab, setActiveTab] = useState<"ALL" | "ANIME" | "MANGA" | "TV_SHOW" | "MOVIE">("ALL");
@@ -250,6 +274,7 @@ export default function Home() {
   // Set isMounted to true on client mount to bypass Next.js hydration issues
   useEffect(() => {
     setIsMounted(true);
+    setLoaderIndex(Math.floor(Math.random() * LOADERS_DATA.length));
     const savedToken = localStorage.getItem("umt_token");
     const savedUser = localStorage.getItem("umt_user");
     if (savedToken && savedUser) {
@@ -990,6 +1015,109 @@ export default function Home() {
     }
   };
 
+  const renderLoader = (isFullScreen: boolean) => {
+    const loader = LOADERS_DATA[loaderIndex] || LOADERS_DATA[0];
+
+    const loaderContent = (
+      <div className="flex flex-col items-center justify-center text-center gap-5">
+        <style>{`
+          @keyframes dinoWalk {
+            0%, 100% { transform: translateX(-15px) rotate(-5deg); }
+            50% { transform: translateX(15px) rotate(5deg); }
+          }
+          @keyframes nekoRun {
+            0% { transform: scaleX(1) translateY(0); }
+            25% { transform: scaleX(0.9) translateY(-6px) rotate(3deg); }
+            50% { transform: scaleX(1.1) translateY(0) rotate(-3deg); }
+            75% { transform: scaleX(0.9) translateY(-6px) rotate(3deg); }
+            100% { transform: scaleX(1) translateY(0); }
+          }
+          @keyframes wandCast {
+            0% { transform: rotate(0deg) translate(-2px, -2px) rotate(0deg); }
+            50% { transform: rotate(180deg) translate(2px, 2px) rotate(-180deg); }
+            100% { transform: rotate(360deg) translate(-2px, -2px) rotate(-360deg); }
+          }
+          @keyframes bobaShake {
+            0%, 100% { transform: rotate(-8deg) translateY(0); }
+            50% { transform: rotate(8deg) translateY(-4px); }
+          }
+          @keyframes arcadePulse {
+            0%, 100% { transform: scale(1) translateY(0); filter: drop-shadow(0 0 2px #ff2e43); }
+            50% { transform: scale(1.1) translateY(-5px); filter: drop-shadow(0 0 10px #ff2e43); }
+          }
+          .animate-dinowalk { animation: dinoWalk 1.6s infinite ease-in-out; }
+          .animate-nekorun { animation: nekoRun 0.8s infinite linear; }
+          .animate-wandcast { animation: wandCast 2s infinite linear; }
+          .animate-bobashake { animation: bobaShake 0.6s infinite ease-in-out; }
+          .animate-arcadepulse { animation: arcadePulse 1.2s infinite ease-in-out; }
+        `}</style>
+
+        {/* Dynamic Animated Mascot */}
+        <div className="relative flex items-center justify-center min-h-[64px]">
+          {loaderIndex === 0 && (
+            <div className="flex flex-col items-center">
+              <div className="text-5xl animate-dinowalk select-none">🦖</div>
+              <div className="w-20 h-1 bg-[#1f212a] rounded-full mt-3 overflow-hidden relative">
+                <div className="absolute top-0 bottom-0 left-0 bg-[#ff2e43] w-1/3 rounded-full" style={{ animation: "dinoWalk 1.6s infinite ease-in-out" }} />
+              </div>
+            </div>
+          )}
+          {loaderIndex === 1 && (
+            <div className="flex items-center gap-2">
+              <div className="text-5xl animate-nekorun select-none">🐈</div>
+              <div className="text-2xl animate-pulse select-none">🐟</div>
+            </div>
+          )}
+          {loaderIndex === 2 && (
+            <div className="relative w-16 h-16 flex items-center justify-center">
+              <div className="text-5xl animate-wandcast select-none">🪄</div>
+              <div className="absolute text-lg select-none" style={{ animation: "spin 3s infinite linear", transformOrigin: "center" }}>✨</div>
+            </div>
+          )}
+          {loaderIndex === 3 && (
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="text-5xl animate-arcadepulse select-none">👾</div>
+              <div className="text-[9px] font-mono text-[#ff2e43] font-bold uppercase tracking-widest animate-pulse">Insert Coin</div>
+            </div>
+          )}
+          {loaderIndex === 4 && (
+            <div className="flex flex-col items-center">
+              <div className="text-5xl animate-bobashake select-none">🥤</div>
+            </div>
+          )}
+        </div>
+
+        {/* Text Guidelines */}
+        <div className="space-y-1.5 max-w-xs">
+          <h3 className="text-sm font-black uppercase tracking-widest text-[#ff2e43] animate-pulse">
+            {loader.text}
+          </h3>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider leading-relaxed animate-pulse">
+            {loader.subtext}
+          </p>
+        </div>
+      </div>
+    );
+
+    if (isFullScreen) {
+      return (
+        <div className="min-h-screen bg-[#050608] text-[#f3f4f6] flex flex-col items-center justify-center font-sans gap-6 p-4">
+          <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-[#ff2e43]/5 rounded-full blur-[140px] pointer-events-none" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-500/5 rounded-full blur-[140px] pointer-events-none" />
+          <div className="bg-[#0f1015]/85 border border-[#1f212a] rounded-3xl p-8 sm:p-10 shadow-2xl backdrop-blur-2xl max-w-sm w-full animate-in fade-in zoom-in-95 duration-300">
+            {loaderContent}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-[#0f1015]/40 border border-[#1f212a] rounded-3xl p-16 text-center flex flex-col items-center justify-center gap-6 min-h-[350px] animate-in fade-in duration-300">
+        {loaderContent}
+      </div>
+    );
+  };
+
   const filteredMedia = mediaList.filter((item) => {
     const matchesSearch =
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1011,21 +1139,7 @@ export default function Home() {
   );
 
   if (!isMounted) {
-    return (
-      <div className="min-h-screen bg-[#050608] text-[#f3f4f6] flex flex-col items-center justify-center font-sans gap-6">
-        <div className="relative flex items-center justify-center">
-          <div className="absolute w-24 h-24 bg-[#ff2e43]/15 rounded-full animate-ping duration-1000" />
-          <div className="absolute w-16 h-16 bg-[#ff2e43]/20 rounded-full animate-pulse" />
-          <div className="w-12 h-12 bg-[#ff2e43] rounded-2xl flex items-center justify-center shadow-lg shadow-[#ff2e43]/30 animate-bounce">
-            <Sparkles className="w-6 h-6 text-white animate-spin duration-3000" />
-          </div>
-        </div>
-        <div className="text-center space-y-1.5">
-          <h3 className="text-sm font-black tracking-widest text-white uppercase animate-pulse">Loading BingeLog...</h3>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Please wait (｡♥‿♥｡)</p>
-        </div>
-      </div>
-    );
+    return renderLoader(true);
   }
 
   // IF USER IS NOT LOGGED IN, RENDER AUTHENTICATION VIEW (Trakt style cinematic dark login)
@@ -1725,19 +1839,7 @@ export default function Home() {
 
           {/* DYNAMIC LIST LEDGER CONTAINER (Trakt vertical cards poster grid) */}
           {isLoadingWatchlist ? (
-            <div className="bg-[#0f1015] border border-[#1f212a] rounded-3xl p-16 text-center flex flex-col items-center justify-center gap-6 min-h-[350px]">
-              <div className="relative flex items-center justify-center">
-                <div className="absolute w-20 h-20 bg-[#ff2e43]/10 rounded-full animate-ping duration-1500" />
-                <div className="absolute w-14 h-14 bg-[#ff2e43]/20 rounded-full animate-pulse" />
-                <div className="w-10 h-10 bg-[#ff2e43] rounded-xl flex items-center justify-center shadow-lg shadow-[#ff2e43]/20 animate-bounce">
-                  <Sparkles className="w-5 h-5 text-white animate-spin duration-3000" />
-                </div>
-              </div>
-              <div className="space-y-1.5 text-center">
-                <h3 className="text-xs font-black uppercase tracking-widest text-[#ff2e43] animate-pulse">Summoning watchlist...</h3>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Connecting to server database (o^▽^o)</p>
-              </div>
-            </div>
+            renderLoader(false)
           ) : filteredMedia.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-in fade-in duration-300">
               {filteredMedia.map((item) => {
