@@ -26,7 +26,7 @@
     {
       "matches": [
         "http://localhost:3000/*",
-        "https://*.yourproductiondomain.com/*"
+        "https://bingelogclient.onrender.com/*"
       ],
       "js": [
         "content/auth-sync.js"
