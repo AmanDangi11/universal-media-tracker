@@ -1012,8 +1012,18 @@ export default function Home() {
 
   if (!isMounted) {
     return (
-      <div className="min-h-screen bg-[#050608] text-[#f3f4f6] flex items-center justify-center font-sans">
-        <div className="w-10 h-10 border-4 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#050608] text-[#f3f4f6] flex flex-col items-center justify-center font-sans gap-6">
+        <div className="relative flex items-center justify-center">
+          <div className="absolute w-24 h-24 bg-[#ff2e43]/15 rounded-full animate-ping duration-1000" />
+          <div className="absolute w-16 h-16 bg-[#ff2e43]/20 rounded-full animate-pulse" />
+          <div className="w-12 h-12 bg-[#ff2e43] rounded-2xl flex items-center justify-center shadow-lg shadow-[#ff2e43]/30 animate-bounce">
+            <Sparkles className="w-6 h-6 text-white animate-spin duration-3000" />
+          </div>
+        </div>
+        <div className="text-center space-y-1.5">
+          <h3 className="text-sm font-black tracking-widest text-white uppercase animate-pulse">Loading BingeLog...</h3>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Please wait (｡♥‿♥｡)</p>
+        </div>
       </div>
     );
   }
@@ -1715,14 +1725,18 @@ export default function Home() {
 
           {/* DYNAMIC LIST LEDGER CONTAINER (Trakt vertical cards poster grid) */}
           {isLoadingWatchlist ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-pulse">
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="bg-[#0f1015] border border-[#1f212a] rounded-2xl h-[340px] flex flex-col p-4.5 gap-3">
-                  <div className="bg-[#1f212a]/50 rounded-xl flex-1 w-full" />
-                  <div className="h-4 bg-[#1f212a]/50 rounded-md w-3/4" />
-                  <div className="h-3 bg-[#1f212a]/50 rounded-md w-1/2" />
+            <div className="bg-[#0f1015] border border-[#1f212a] rounded-3xl p-16 text-center flex flex-col items-center justify-center gap-6 min-h-[350px]">
+              <div className="relative flex items-center justify-center">
+                <div className="absolute w-20 h-20 bg-[#ff2e43]/10 rounded-full animate-ping duration-1500" />
+                <div className="absolute w-14 h-14 bg-[#ff2e43]/20 rounded-full animate-pulse" />
+                <div className="w-10 h-10 bg-[#ff2e43] rounded-xl flex items-center justify-center shadow-lg shadow-[#ff2e43]/20 animate-bounce">
+                  <Sparkles className="w-5 h-5 text-white animate-spin duration-3000" />
                 </div>
-              ))}
+              </div>
+              <div className="space-y-1.5 text-center">
+                <h3 className="text-xs font-black uppercase tracking-widest text-[#ff2e43] animate-pulse">Summoning watchlist...</h3>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Connecting to server database (o^▽^o)</p>
+              </div>
             </div>
           ) : filteredMedia.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-in fade-in duration-300">
@@ -1932,13 +1946,30 @@ export default function Home() {
                 );
               })}
             </div>
+          ) : mediaList.length === 0 ? (
+            <div className="bg-[#0f1015] border border-[#1f212a] rounded-3xl p-8 sm:p-16 text-center flex flex-col items-center justify-center gap-5">
+              <Sparkles className="w-12 h-12 text-[#ff2e43] animate-pulse" />
+              <div>
+                <h3 className="text-base font-bold text-slate-200">Your Watchlist is Empty!</h3>
+                <p className="text-xs text-slate-500 mt-1.5 max-w-xs mx-auto leading-relaxed">
+                  Start tracking by adding your favorite Anime, Manga, TV Series, or Movies. Click below to start! (o^▽^o)
+                </p>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="px-5 py-3 bg-[#ff2e43] hover:bg-[#e02034] text-white text-xs font-bold rounded-xl transition-all shadow-lg flex items-center gap-1.5 min-h-[44px]"
+              >
+                <Plus className="w-4 h-4" />
+                Add Your First Media
+              </button>
+            </div>
           ) : (
             <div className="bg-[#0f1015] border border-[#1f212a] rounded-3xl p-8 sm:p-16 text-center flex flex-col items-center justify-center gap-4">
               <Search className="w-12 h-12 text-[#1f212a]" />
               <div>
                 <h3 className="text-base font-bold text-slate-300">No media cards found matching search</h3>
                 <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto px-4">
-                  "{searchQuery}" was not found in your tracker. Would you like to search online API lists?
+                  "{searchQuery}" was not found in your watchlist. Would you like to search online API lists?
                 </p>
               </div>
               <button
@@ -1949,7 +1980,7 @@ export default function Home() {
                 className="px-5 py-3 bg-[#ff2e43] hover:bg-[#e02034] text-white text-xs font-bold rounded-xl transition-all shadow-lg flex items-center gap-1.5 min-h-[44px]"
               >
                 <Plus className="w-4 h-4" />
-                Add Media
+                Search Online Index
               </button>
             </div>
           )}
