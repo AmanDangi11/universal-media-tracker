@@ -473,8 +473,8 @@ app.delete('/api/watchlist/:id', authenticateToken, async (req: AuthenticatedReq
   try {
     const { id } = req.params;
 
-    if (!id) {
-      return res.status(400).json({ error: 'Progress record ID is required' });
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Progress record ID is required and must be a string' });
     }
 
     // Find progress record and verify ownership
