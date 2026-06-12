@@ -2248,10 +2248,7 @@ export default function Home() {
 
       </main>
 
-      {/* FOOTER SYSTEM METADATA */}
-      <footer className="border-t border-[#1f212a] bg-[#050608] mt-16 px-4 py-8 text-center text-xs text-slate-650 font-bold uppercase tracking-wider">
-        <p>© 2026 BingeLog Media Tracker. Powered by AniList & TMDB API providers.</p>
-      </footer>
+
 
       {/* Mobile Floating Bottom Bar */}
       <div className="md:hidden fixed bottom-4 left-4 right-4 z-40 bg-[#0f1015]/90 border border-[#1f212a] p-2.5 rounded-2xl flex justify-around shadow-2xl items-center backdrop-blur-md">
