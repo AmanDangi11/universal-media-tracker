@@ -172,6 +172,54 @@ app.get('/api/auth/me', authenticateToken, async (req: AuthenticatedRequest, res
 
 // --- USER WATCHLIST PERSISTING ENDPOINTS ---
 
+// Check if a specific media item is in the user's watchlist by its title
+app.get('/api/watchlist/check', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const title = req.query.title as string;
+    if (!title) {
+      return res.status(400).json({ error: 'Title query parameter is required' });
+    }
+
+    // Find progress record matching this user and whose media title (English or Romaji) contains the title
+    const match = await prisma.userMediaProgress.findFirst({
+      where: {
+        userId: req.userId,
+        media: {
+          OR: [
+            { titleEnglish: { contains: title, mode: 'insensitive' } },
+            { titleRomaji: { contains: title, mode: 'insensitive' } }
+          ]
+        }
+      },
+      include: {
+        media: true
+      }
+    });
+
+    if (!match) {
+      return res.json({ exists: false });
+    }
+
+    res.json({
+      exists: true,
+      progress: {
+        id: match.id,
+        currentProgress: match.currentProgress,
+        status: match.status,
+        media: {
+          id: match.media.id,
+          title: match.media.titleEnglish,
+          type: match.media.type,
+          totalProgress: match.media.totalEpisodes || match.media.totalChapters || 12
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Checking watchlist failed:', error);
+    res.status(500).json({ error: 'Failed to check watchlist status' });
+  }
+});
+
 // Fetch Watchlist items
 app.get('/api/watchlist', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {

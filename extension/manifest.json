@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Universal Media Tracker Auto-Sync",
+  "version": "1.0.0",
+  "description": "Automatically detect and sync your anime and show progress with Universal Media Tracker.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:5000/*",
+    "https://graphql.anilist.co/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.crunchyroll.com/*"
+      ],
+      "js": [
+        "content/crunchyroll.js"
+      ],
+      "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "http://localhost:3000/*"
+      ],
+      "js": [
+        "content/auth-sync.js"
+      ],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html"
+  }
+}

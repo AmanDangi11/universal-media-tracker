@@ -206,6 +206,7 @@ const getApiBaseUrl = () => {
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
+  const [isLoadingWatchlist, setIsLoadingWatchlist] = useState(true);
   const [activeTab, setActiveTab] = useState<"ALL" | "ANIME" | "MANGA" | "TV_SHOW" | "MOVIE">("ALL");
   const [mobileActiveTab, setMobileActiveTab] = useState<"LIST" | "CALENDAR" | "DISCOVER" | "STATS">("LIST");
   const [searchQuery, setSearchQuery] = useState("");
@@ -360,7 +361,11 @@ export default function Home() {
   };
 
   const fetchWatchlist = () => {
-    if (!token) return;
+    if (!token) {
+      setIsLoadingWatchlist(false);
+      return;
+    }
+    setIsLoadingWatchlist(true);
     fetch(`${getApiBaseUrl()}/api/watchlist`, {
       headers: {
         "Authorization": `Bearer ${token}`
@@ -438,12 +443,25 @@ export default function Home() {
             setMediaList(updatedItems);
           }
         }
+        setIsLoadingWatchlist(false);
       })
-      .catch((err) => console.error("Failed to fetch watchlist:", err));
+      .catch((err) => {
+        console.error("Failed to fetch watchlist:", err);
+        setIsLoadingWatchlist(false);
+      });
   };
 
   useEffect(() => {
     fetchWatchlist();
+
+    const handleFocus = () => {
+      fetchWatchlist();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [token]);
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -1637,7 +1655,17 @@ export default function Home() {
           </div>
 
           {/* DYNAMIC LIST LEDGER CONTAINER (Trakt vertical cards poster grid) */}
-          {filteredMedia.length > 0 ? (
+          {isLoadingWatchlist ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-pulse">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="bg-[#0f1015] border border-[#1f212a] rounded-2xl h-[340px] flex flex-col p-4.5 gap-3">
+                  <div className="bg-[#1f212a]/50 rounded-xl flex-1 w-full" />
+                  <div className="h-4 bg-[#1f212a]/50 rounded-md w-3/4" />
+                  <div className="h-3 bg-[#1f212a]/50 rounded-md w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : filteredMedia.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-in fade-in duration-300">
               {filteredMedia.map((item) => {
                 const percent = Math.round((item.currentProgress / item.totalProgress) * 100);
