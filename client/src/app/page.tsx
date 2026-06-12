@@ -30,7 +30,8 @@ import {
   LogOut,
   User,
   Trash2,
-  Puzzle
+  Puzzle,
+  Palette
 } from "lucide-react";
 
 // Types
@@ -205,6 +206,92 @@ const getApiBaseUrl = () => {
   return "http://localhost:5000";
 };
 
+const THEMES: Record<string, {
+  name: string;
+  description: string;
+  background: string;
+  foreground: string;
+  cardBg: string;
+  cardBgRgb: string;
+  cardBorder: string;
+  cardBorderRgb: string;
+  accent: string;
+  accentRgb: string;
+  accentHover: string;
+  hoverBg: string;
+}> = {
+  "sunset-crimson": {
+    name: "Sunset Crimson",
+    description: "Classic high-contrast dark gray and scarlet red.",
+    background: "#050608",
+    foreground: "#f3f4f6",
+    cardBg: "#0f1015",
+    cardBgRgb: "15, 16, 21",
+    cardBorder: "#1f212a",
+    cardBorderRgb: "31, 33, 42",
+    accent: "#ff2e43",
+    accentRgb: "255, 46, 67",
+    accentHover: "#e02034",
+    hoverBg: "#2b2e3b"
+  },
+  "midnight-indigo": {
+    name: "Midnight Indigo",
+    description: "Deep cyberspace violet with electric indigo accents.",
+    background: "#030712",
+    foreground: "#f3f4f6",
+    cardBg: "#0f172a",
+    cardBgRgb: "15, 23, 42",
+    cardBorder: "#1e293b",
+    cardBorderRgb: "30, 41, 59",
+    accent: "#818cf8",
+    accentRgb: "129, 140, 248",
+    accentHover: "#6366f1",
+    hoverBg: "#334155"
+  },
+  "emerald-forest": {
+    name: "Emerald Forest",
+    description: "Soothing deep jade green with vibrant emerald accents.",
+    background: "#022c22",
+    foreground: "#f0fdf4",
+    cardBg: "#064e3b",
+    cardBgRgb: "6, 78, 59",
+    cardBorder: "#115e59",
+    cardBorderRgb: "17, 94, 89",
+    accent: "#10b981",
+    accentRgb: "16, 185, 129",
+    accentHover: "#059669",
+    hoverBg: "#134e4a"
+  },
+  "sakura-blossom": {
+    name: "Sakura Blossom",
+    description: "Sweet dark rosewood with soft cherry blossom pink.",
+    background: "#180f12",
+    foreground: "#fdf2f8",
+    cardBg: "#271d22",
+    cardBgRgb: "39, 29, 34",
+    cardBorder: "#4c1d33",
+    cardBorderRgb: "76, 29, 51",
+    accent: "#ec4899",
+    accentRgb: "236, 72, 153",
+    accentHover: "#db2777",
+    hoverBg: "#5c2a41"
+  },
+  "oceanic-abyss": {
+    name: "Oceanic Abyss",
+    description: "Abyssal navy depths with glowing cyan coordinates.",
+    background: "#020813",
+    foreground: "#ecfeff",
+    cardBg: "#0b132b",
+    cardBgRgb: "11, 19, 43",
+    cardBorder: "#1c2541",
+    cardBorderRgb: "28, 37, 65",
+    accent: "#0ea5e9",
+    accentRgb: "14, 165, 233",
+    accentHover: "#0284c7",
+    hoverBg: "#3a506b"
+  }
+};
+
 const LOADERS_DATA = [
   {
     text: "Summoning magical girl sparkles...",
@@ -231,6 +318,8 @@ const LOADERS_DATA = [
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   const [loaderIndex, setLoaderIndex] = useState(0);
+  const [activeTheme, setActiveTheme] = useState("sunset-crimson");
+  const [isThemeOpen, setIsThemeOpen] = useState(false);
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [isLoadingWatchlist, setIsLoadingWatchlist] = useState(true);
   const [activeTab, setActiveTab] = useState<"ALL" | "ANIME" | "MANGA" | "TV_SHOW" | "MOVIE">("ALL");
@@ -283,6 +372,12 @@ export default function Home() {
     }
     // Initialize settings state
     setCustomApiUrl(localStorage.getItem("UMT_API_URL") || getApiBaseUrl());
+    
+    // Load saved theme configuration
+    const savedTheme = localStorage.getItem("UMT_ACTIVE_THEME");
+    if (savedTheme && THEMES[savedTheme]) {
+      setActiveTheme(savedTheme);
+    }
   }, []);
 
   // Synchronize modal search category selection with the currently active filter tab
@@ -1289,6 +1384,57 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#050608] text-[#f3f4f6] font-sans selection:bg-[#ff2e43] selection:text-white overflow-x-hidden pb-12">
+      <style>{`
+        :root {
+          --background: ${THEMES[activeTheme].background};
+          --foreground: ${THEMES[activeTheme].foreground};
+          --color-card-bg: ${THEMES[activeTheme].cardBg};
+          --color-card-border: ${THEMES[activeTheme].cardBorder};
+          --color-accent-red: ${THEMES[activeTheme].accent};
+        }
+        
+        .bg-\[\#050608\] { background-color: var(--background) !important; }
+        .bg-\[\#0f1015\] { background-color: var(--color-card-bg) !important; }
+        .bg-\[\#0f1015\]\/80 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.8) !important; }
+        .bg-\[\#0f1015\]\/50 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.5) !important; }
+        .bg-\[\#0f1015\]\/40 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.4) !important; }
+        
+        .border-\[\#1f212a\] { border-color: var(--color-card-border) !important; }
+        .border-\[\#1f212a\]\/50 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.5) !important; }
+        .border-\[\#1f212a\]\/30 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.3) !important; }
+        
+        .hover\:bg-\[\#1f212a\]:hover { background-color: var(--color-card-border) !important; }
+        .hover\:bg-\[\#2b2e3b\]:hover { background-color: ${THEMES[activeTheme].hoverBg} !important; }
+        
+        .bg-\[\#ff2e43\] { background-color: var(--color-accent-red) !important; }
+        .bg-\[\#ff2e43\]\/10 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
+        .bg-\[\#ff2e43\]\/15 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
+        .text-\[\#ff2e43\] { color: var(--color-accent-red) !important; }
+        .border-\[\#ff2e43\]\/20 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+        .border-\[\#ff2e43\]\/25 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+        .border-\[\#ff2e43\]\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+        .hover\:border-\[\#ff2e43\]\/25:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+        .hover\:border-\[\#ff2e43\]\/30:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+        .shadow-\[\#ff2e43\]\/20 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+        .shadow-\[\#ff2e43\]\/15 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
+        .shadow-\[\#ff2e43\]\/25 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
+        .shadow-\[\#ff2e43\]\/10 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
+        
+        .hover\:bg-\[\#e02034\]:hover { background-color: ${THEMES[activeTheme].accentHover} !important; }
+        .hover\:text-\[\#ff2e43\]:hover { color: var(--color-accent-red) !important; }
+        .selection\:bg-\[\#ff2e43\]::selection { background-color: var(--color-accent-red) !important; }
+        
+        .bg-red-950\/20 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.08) !important; }
+        .border-red-900\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
+        .hover\:bg-\[\#ff2e43\]\/10:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
+        
+        ::-webkit-scrollbar-thumb {
+          background: var(--color-card-border) !important;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: ${THEMES[activeTheme].hoverBg} !important;
+        }
+      `}</style>
 
       {/* Floating Webhook Progress Notification Card */}
       {showNotification && (
@@ -1359,6 +1505,98 @@ export default function Home() {
                 className="px-5 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
               >
                 Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* THEME CUSTOMIZATION MODAL */}
+      {isThemeOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4 animate-fade-in">
+          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
+
+            {/* Header */}
+            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
+              <div className="flex items-center gap-2">
+                <Palette className="w-5 h-5 text-[#ff2e43]" />
+                <h2 className="text-base font-bold text-slate-100">Theme Customization</h2>
+              </div>
+              <button
+                onClick={() => setIsThemeOpen(false)}
+                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all active:scale-95"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+              <p className="text-xs text-slate-400 font-medium leading-relaxed">
+                Choose a coordinated color profile template. The selected theme will dynamically apply to the entire dashboard and mobile interface layout instantly.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
+                {Object.entries(THEMES).map(([key, theme]) => {
+                  const isActive = activeTheme === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        setActiveTheme(key);
+                        localStorage.setItem("UMT_ACTIVE_THEME", key);
+                      }}
+                      className={`relative w-full text-left p-4 rounded-2xl border transition-all duration-200 hover:scale-[1.02] flex flex-col justify-between h-36 focus:outline-none ${
+                        isActive
+                          ? "bg-[#1f212a] shadow-lg"
+                          : "bg-[#0f1015] hover:bg-[#1f212a]/50"
+                      }`}
+                      style={{
+                        borderColor: isActive ? theme.accent : "var(--color-card-border)",
+                        boxShadow: isActive ? `0 0 15px rgba(${theme.accentRgb}, 0.15)` : "none"
+                      }}
+                    >
+                      <div className="space-y-1.5 w-full">
+                        <div className="flex justify-between items-center w-full">
+                          <span className="text-xs font-bold text-slate-100">{theme.name}</span>
+                          {isActive && (
+                            <span 
+                              className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider text-white flex items-center gap-1"
+                              style={{ backgroundColor: theme.accent }}
+                            >
+                              <Check className="w-2.5 h-2.5 stroke-[3]" /> Active
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-relaxed font-medium">
+                          {theme.description}
+                        </p>
+                      </div>
+
+                      {/* Visual Color Bar Preview */}
+                      <div className="flex items-center justify-between w-full mt-4 pt-2 border-t border-[#1f212a]/40">
+                        <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wider">Palette</span>
+                        <div className="flex gap-1.5">
+                          <span className="w-5 h-5 rounded-lg border border-slate-800 flex items-center justify-center text-[8px] text-slate-500 font-bold" style={{ backgroundColor: theme.background }} title="Background">Bg</span>
+                          <span className="w-5 h-5 rounded-lg border border-slate-800 flex items-center justify-center text-[8px] text-slate-500 font-bold" style={{ backgroundColor: theme.cardBg }} title="Cards">Cd</span>
+                          <span className="w-5 h-5 rounded-lg border border-slate-800 flex items-center justify-center text-[8px] text-slate-500 font-bold" style={{ backgroundColor: theme.cardBorder }} title="Borders">Bd</span>
+                          <span className="w-5 h-5 rounded-lg flex items-center justify-center text-[8px] text-white font-bold" style={{ backgroundColor: theme.accent }} title="Accent">Ac</span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-end px-6">
+              <button
+                onClick={() => setIsThemeOpen(false)}
+                className="px-5 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+              >
+                Done
               </button>
             </div>
 
@@ -1753,6 +1991,13 @@ export default function Home() {
                 title="Extension Management"
               >
                 <Puzzle className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setIsThemeOpen(true)}
+                className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-slate-100 hover:border-slate-800 rounded-xl transition-all active:scale-95"
+                title="Theme Customization"
+              >
+                <Palette className="w-4 h-4" />
               </button>
               <button
                 onClick={handleLogout}
@@ -2328,6 +2573,14 @@ export default function Home() {
           >
             <Puzzle className="w-4 h-4" />
             Extension Management
+          </button>
+
+          <button
+            onClick={() => setIsThemeOpen(true)}
+            className="w-full py-3.5 bg-[#0f1015] hover:bg-[#1f212a] border border-[#1f212a] text-xs font-extrabold rounded-xl text-slate-300 transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
+          >
+            <Palette className="w-4 h-4" />
+            Theme Customization
           </button>
 
           {/* Mobile Sign Out */}
