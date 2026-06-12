@@ -288,6 +288,15 @@ app.post('/api/watchlist/add', authenticateToken, async (req: AuthenticatedReque
                 resolvedTotalEpisodes = details.totalEpisodes;
               }
             }
+          } else if (externalId.startsWith('tvmaze-season-') && (type === 'TV_SHOW' || type === 'ANIME')) {
+            const seasonId = parseInt(externalId.replace('tvmaze-season-', ''), 10);
+            if (!isNaN(seasonId)) {
+              const tvmazeUrl = `https://api.tvmaze.com/seasons/${seasonId}/episodes`;
+              const response = await axios.get(tvmazeUrl, { timeout: 5000 });
+              if (Array.isArray(response.data)) {
+                resolvedTotalEpisodes = response.data.length;
+              }
+            }
           } else if (externalId.startsWith('tvmaze-') && (type === 'TV_SHOW' || type === 'ANIME')) {
             const tvmazeId = parseInt(externalId.replace('tvmaze-', ''), 10);
             if (!isNaN(tvmazeId)) {
@@ -570,26 +579,62 @@ app.get('/api/search', async (req: Request, res: Response) => {
       }
     }
 
-    // 2. Otherwise, use 100% free, dynamic keyless APIs (IMDb Search API for movies and TV shows)
+    // 2. Otherwise, use 100% free, dynamic keyless APIs (TVmaze for TV shows/seasons, IMDb for movies)
     let dynamicResults: any[] = [];
 
     try {
-      const imdbUrl = `https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(q)}`;
-      const imdbResponse = await axios.get(imdbUrl, { timeout: 5000 });
-      const items = imdbResponse.data?.description || [];
-
       if (type === 'TV_SHOW') {
-        dynamicResults = items.slice(0, 10).map((show: any) => ({
-          id: `imdb-tv-${show['#IMDB_ID']}`,
-          type: 'TV_SHOW' as const,
-          title: show['#TITLE'] || 'Unknown Show',
-          franchise: `${show['#TITLE'] || 'Unknown'} Franchise`,
-          coverImage: show['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
-          synopsis: `Year: ${show['#YEAR'] || 'N/A'}. Starring: ${show['#ACTORS'] || 'N/A'}. AKA: ${show['#AKA'] || 'N/A'}.`,
-          totalProgress: 12, // Default, will resolve on watchlist add
-          progressType: 'episode' as const
+        const tvmazeSearchUrl = `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(q)}`;
+        const searchRes = await axios.get(tvmazeSearchUrl, { timeout: 5000 });
+        const matches = searchRes.data || [];
+        
+        const topMatches = matches.slice(0, 4);
+        const expanded: any[] = [];
+        
+        await Promise.all(topMatches.map(async (matchItem: any) => {
+          const show = matchItem.show;
+          if (!show) return;
+          
+          try {
+            const seasonsUrl = `https://api.tvmaze.com/shows/${show.id}/seasons`;
+            const seasonsRes = await axios.get(seasonsUrl, { timeout: 3000 });
+            const seasons = seasonsRes.data || [];
+            
+            seasons.forEach((season: any) => {
+              if (season.number && (season.episodeOrder || 1) > 0) {
+                expanded.push({
+                  id: `tvmaze-season-${season.id}`,
+                  type: 'TV_SHOW' as const,
+                  title: `${show.name} - Season ${season.number}`,
+                  franchise: `${show.name} Franchise`,
+                  coverImage: season.image?.medium || show.image?.medium || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+                  synopsis: season.summary ? season.summary.replace(/<[^>]*>/g, '') : (show.summary ? show.summary.replace(/<[^>]*>/g, '') : `Season ${season.number} of ${show.name}.`),
+                  totalProgress: season.episodeOrder || 10,
+                  progressType: 'episode' as const,
+                  externalId: `tvmaze-season-${season.id}`
+                });
+              }
+            });
+          } catch (err) {
+            console.error(`Failed to fetch seasons for TVmaze show ${show.id}:`, err);
+            expanded.push({
+              id: `tvmaze-${show.id}`,
+              type: 'TV_SHOW' as const,
+              title: show.name,
+              franchise: `${show.name} Franchise`,
+              coverImage: show.image?.medium || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+              synopsis: show.summary ? show.summary.replace(/<[^>]*>/g, '') : 'No synopsis available.',
+              totalProgress: 12,
+              progressType: 'episode' as const,
+              externalId: `tvmaze-${show.id}`
+            });
+          }
         }));
+        dynamicResults = expanded;
       } else if (type === 'MOVIE') {
+        const imdbUrl = `https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(q)}`;
+        const imdbResponse = await axios.get(imdbUrl, { timeout: 5000 });
+        const items = imdbResponse.data?.description || [];
         dynamicResults = items.slice(0, 10).map((movie: any) => ({
           id: `imdb-movie-${movie['#IMDB_ID']}`,
           type: 'MOVIE' as const,
@@ -600,34 +645,75 @@ app.get('/api/search', async (req: Request, res: Response) => {
           totalProgress: 1,
           progressType: 'episode' as const
         }));
-      } else if (type === 'ALL') {
-        // Return both mapped shows and mapped movies
-        const mappedShows = items.slice(0, 5).map((show: any) => ({
-          id: `imdb-tv-${show['#IMDB_ID']}`,
-          type: 'TV_SHOW' as const,
-          title: `${show['#TITLE']} (Series)`,
-          franchise: `${show['#TITLE'] || 'Unknown'} Franchise`,
-          coverImage: show['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
-          synopsis: `Year: ${show['#YEAR'] || 'N/A'}. Starring: ${show['#ACTORS'] || 'N/A'}. AKA: ${show['#AKA'] || 'N/A'}.`,
-          totalProgress: 12,
-          progressType: 'episode' as const
-        }));
+      } else {
+        // ALL
+        let mappedShows: any[] = [];
+        try {
+          const tvmazeSearchUrl = `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(q)}`;
+          const searchRes = await axios.get(tvmazeSearchUrl, { timeout: 4000 });
+          const matches = searchRes.data || [];
+          
+          await Promise.all(matches.slice(0, 2).map(async (matchItem: any) => {
+            const show = matchItem.show;
+            if (!show) return;
+            try {
+              const seasonsUrl = `https://api.tvmaze.com/shows/${show.id}/seasons`;
+              const seasonsRes = await axios.get(seasonsUrl, { timeout: 2000 });
+              const seasons = seasonsRes.data || [];
+              seasons.forEach((season: any) => {
+                mappedShows.push({
+                  id: `tvmaze-season-${season.id}`,
+                  type: 'TV_SHOW' as const,
+                  title: `${show.name} - Season ${season.number} (Series)`,
+                  franchise: `${show.name} Franchise`,
+                  coverImage: season.image?.medium || show.image?.medium || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+                  synopsis: season.summary ? season.summary.replace(/<[^>]*>/g, '') : (show.summary ? show.summary.replace(/<[^>]*>/g, '') : `Season ${season.number} of ${show.name}.`),
+                  totalProgress: season.episodeOrder || 10,
+                  progressType: 'episode' as const,
+                  externalId: `tvmaze-season-${season.id}`
+                });
+              });
+            } catch (err) {
+              mappedShows.push({
+                id: `tvmaze-${show.id}`,
+                type: 'TV_SHOW' as const,
+                title: `${show.name} (Series)`,
+                franchise: `${show.name} Franchise`,
+                coverImage: show.image?.medium || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+                synopsis: show.summary ? show.summary.replace(/<[^>]*>/g, '') : 'No synopsis available.',
+                totalProgress: 12,
+                progressType: 'episode' as const,
+                externalId: `tvmaze-${show.id}`
+              });
+            }
+          }));
+        } catch (err) {
+          console.error("TVmaze search error in ALL:", err);
+        }
 
-        const mappedMovies = items.slice(0, 5).map((movie: any) => ({
-          id: `imdb-movie-${movie['#IMDB_ID']}`,
-          type: 'MOVIE' as const,
-          title: `${movie['#TITLE']} (Movie)`,
-          franchise: `${movie['#TITLE'] || 'Unknown'} Franchise`,
-          coverImage: movie['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
-          synopsis: `Year: ${movie['#YEAR'] || 'N/A'}. Starring: ${movie['#ACTORS'] || 'N/A'}. AKA: ${movie['#AKA'] || 'N/A'}.`,
-          totalProgress: 1,
-          progressType: 'episode' as const
-        }));
+        let mappedMovies: any[] = [];
+        try {
+          const imdbUrl = `https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(q)}`;
+          const imdbResponse = await axios.get(imdbUrl, { timeout: 4000 });
+          const items = imdbResponse.data?.description || [];
+          mappedMovies = items.slice(0, 5).map((movie: any) => ({
+            id: `imdb-movie-${movie['#IMDB_ID']}`,
+            type: 'MOVIE' as const,
+            title: `${movie['#TITLE']} (Movie)`,
+            franchise: `${movie['#TITLE'] || 'Unknown'} Franchise`,
+            coverImage: movie['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
+            synopsis: `Year: ${movie['#YEAR'] || 'N/A'}. Starring: ${movie['#ACTORS'] || 'N/A'}. AKA: ${movie['#AKA'] || 'N/A'}.`,
+            totalProgress: 1,
+            progressType: 'episode' as const
+          }));
+        } catch (err) {
+          console.error("IMDb search error in ALL:", err);
+        }
 
         dynamicResults = [...mappedShows, ...mappedMovies];
       }
     } catch (err) {
-      console.error("IMDb Search API fetch failed:", err);
+      console.error("Search gateway lookup failed:", err);
     }
 
     return res.json(dynamicResults);

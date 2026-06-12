@@ -1,10 +1,13 @@
 // Background Service Worker for Universal Media Tracker
 const DEFAULT_API_URL = 'http://localhost:5000';
 
+// In-memory mapping of tabId -> active media info (supports cross-origin iframe progress matching)
+const activeTabMedia = {};
+
 // Listen for messages from content scripts or the popup UI
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'CHECK_WATCHLIST') {
-    handleCheckWatchlist(message.title, sendResponse);
+    handleCheckWatchlist(message.title, sender, sendResponse);
     return true; // Keep message channel open for async response
   }
 
@@ -23,6 +26,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('[Background] Automatically synchronized auth token from web app.');
     return false;
   }
+
+  if (message.type === 'REGISTER_TAB_MEDIA') {
+    const tabId = sender.tab ? sender.tab.id : null;
+    if (tabId) {
+      activeTabMedia[tabId] = {
+        title: message.title,
+        episode: message.episode,
+        progressId: message.progressId || null,
+        currentProgress: message.currentProgress || 0
+      };
+      console.log(`[Background] Tab ${tabId} registered: "${message.title}" - Episode ${message.episode}`);
+    }
+    return false;
+  }
+
+  if (message.type === 'IFRAME_VIDEO_COMPLETE') {
+    const tabId = sender.tab ? sender.tab.id : null;
+    if (tabId) {
+      handleIframeVideoComplete(tabId, sendResponse);
+    } else {
+      sendResponse({ success: false, error: 'No associated tab found.' });
+    }
+    return true; // Async response
+  }
 });
 
 // Helper to fetch server connection settings from storage
@@ -39,7 +66,7 @@ async function getSettings() {
 }
 
 // 1. Check if media exists in user's watchlist
-async function handleCheckWatchlist(title, sendResponse) {
+async function handleCheckWatchlist(title, sender, sendResponse) {
   try {
     const { token, apiUrl } = await getSettings();
     if (!token) {
@@ -60,6 +87,14 @@ async function handleCheckWatchlist(title, sendResponse) {
     }
 
     const data = await response.json();
+
+    // Cache lookup results in tab state if tab metadata is active
+    const tabId = sender.tab ? sender.tab.id : null;
+    if (data.exists && tabId && activeTabMedia[tabId] && activeTabMedia[tabId].title === title) {
+      activeTabMedia[tabId].progressId = data.progress.id;
+      activeTabMedia[tabId].currentProgress = data.progress.currentProgress;
+    }
+
     sendResponse(data);
   } catch (error) {
     console.error('[Background] Watchlist check failed:', error);
@@ -199,6 +234,56 @@ async function handleUpdateProgress(progressId, episode, sendResponse) {
     sendResponse({ success: true });
   } catch (error) {
     console.error('[Background] Failed to update progress:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+// 4. Handle cross-origin iframe video progress synchronization
+async function handleIframeVideoComplete(tabId, sendResponse) {
+  try {
+    const media = activeTabMedia[tabId];
+    if (!media) {
+      sendResponse({ success: false, error: 'No active media registered for this tab.' });
+      return;
+    }
+
+    let progressId = media.progressId;
+    let currentProgress = media.currentProgress;
+
+    // If progressId is not cached, fetch it from backend check
+    if (!progressId) {
+      const { token, apiUrl } = await getSettings();
+      if (!token) throw new Error('Unauthorized: No token found.');
+
+      const response = await fetch(`${apiUrl}/api/watchlist/check?title=${encodeURIComponent(media.title)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.exists) {
+          progressId = data.progress.id;
+          currentProgress = data.progress.currentProgress;
+          media.progressId = progressId;
+          media.currentProgress = currentProgress;
+        }
+      }
+    }
+
+    if (!progressId) {
+      sendResponse({ success: false, error: 'Show is not currently in watchlist.' });
+      return;
+    }
+
+    if (media.episode > currentProgress) {
+      console.log(`[Background] Syncing iframe episode progress: ${media.episode} for ID: ${progressId}`);
+      await handleUpdateProgress(progressId, media.episode, sendResponse);
+      media.currentProgress = media.episode;
+    } else {
+      sendResponse({ success: true, message: 'Already up to date.' });
+    }
+  } catch (error) {
+    console.error('[Background] Iframe video complete handler failed:', error);
     sendResponse({ success: false, error: error.message });
   }
 }
