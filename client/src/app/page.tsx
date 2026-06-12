@@ -207,24 +207,24 @@ const getApiBaseUrl = () => {
 
 const LOADERS_DATA = [
   {
-    text: "Dino-mite! Rex is marching...",
-    subtext: "Running through the database timeline (🦖)"
+    text: "Summoning magical girl sparkles...",
+    subtext: "Casting wand spells and loading list data (🪄💖)"
   },
   {
-    text: "Cat-ching your media updates...",
-    subtext: "Whisker-ing database logs into place (ニャー)"
+    text: "Shinobi dash in progress...",
+    subtext: "Rushing through the database network (🥷💨)"
   },
   {
-    text: "Summoning anime magic...",
-    subtext: "Casting sparkles and updating grids (🪄✨)"
+    text: "Powering up energy reserves...",
+    subtext: "Charging cells past 9000! (⚡🔥)"
   },
   {
-    text: "Inserting coin... Loading ledger!",
-    subtext: "Powering up pixel arcade systems (👾)"
+    text: "Waking up database from its nap...",
+    subtext: "Totoro is breathing slowly... (💤🍃)"
   },
   {
-    text: "Brewing fresh Boba tea...",
-    subtext: "Steeping database records (🥤✨)"
+    text: "Serving fresh watchlist entries...",
+    subtext: "Rolling sushi logs down the conveyor (🍣🥢)"
   }
 ];
 
@@ -1021,75 +1021,113 @@ export default function Home() {
     const loaderContent = (
       <div className="flex flex-col items-center justify-center text-center gap-5">
         <style>{`
-          @keyframes dinoWalk {
-            0%, 100% { transform: translateX(-15px) rotate(-5deg); }
-            50% { transform: translateX(15px) rotate(5deg); }
+          @keyframes magicalWand {
+            0%, 100% { transform: translateY(0) rotate(-5deg); }
+            50% { transform: translateY(-10px) rotate(5deg); }
           }
-          @keyframes nekoRun {
-            0% { transform: scaleX(1) translateY(0); }
-            25% { transform: scaleX(0.9) translateY(-6px) rotate(3deg); }
-            50% { transform: scaleX(1.1) translateY(0) rotate(-3deg); }
-            75% { transform: scaleX(0.9) translateY(-6px) rotate(3deg); }
-            100% { transform: scaleX(1) translateY(0); }
+          @keyframes sparkFloat1 {
+            0% { transform: translateY(10px) translateX(0) scale(0.5); opacity: 0; }
+            50% { opacity: 0.8; }
+            100% { transform: translateY(-30px) translateX(-15px) scale(1.2); opacity: 0; }
           }
-          @keyframes wandCast {
-            0% { transform: rotate(0deg) translate(-2px, -2px) rotate(0deg); }
-            50% { transform: rotate(180deg) translate(2px, 2px) rotate(-180deg); }
-            100% { transform: rotate(360deg) translate(-2px, -2px) rotate(-360deg); }
+          @keyframes sparkFloat2 {
+            0% { transform: translateY(10px) translateX(0) scale(0.5); opacity: 0; }
+            50% { opacity: 0.8; }
+            100% { transform: translateY(-35px) translateX(15px) scale(1); opacity: 0; }
           }
-          @keyframes bobaShake {
-            0%, 100% { transform: rotate(-8deg) translateY(0); }
-            50% { transform: rotate(8deg) translateY(-4px); }
+          @keyframes shinobiRun {
+            0%, 100% { transform: skewX(-20deg) translateY(0); }
+            50% { transform: skewX(-22deg) translateY(-4px); }
           }
-          @keyframes arcadePulse {
-            0%, 100% { transform: scale(1) translateY(0); filter: drop-shadow(0 0 2px #ff2e43); }
-            50% { transform: scale(1.1) translateY(-5px); filter: drop-shadow(0 0 10px #ff2e43); }
+          @keyframes speedLine {
+            0% { transform: translateX(50px) scaleX(0.1); opacity: 0; }
+            10%, 80% { opacity: 0.6; }
+            100% { transform: translateX(-80px) scaleX(1.5); opacity: 0; }
           }
-          .animate-dinowalk { animation: dinoWalk 1.6s infinite ease-in-out; }
-          .animate-nekorun { animation: nekoRun 0.8s infinite linear; }
-          .animate-wandcast { animation: wandCast 2s infinite linear; }
-          .animate-bobashake { animation: bobaShake 0.6s infinite ease-in-out; }
-          .animate-arcadepulse { animation: arcadePulse 1.2s infinite ease-in-out; }
+          @keyframes kiPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 15px 2px rgba(255,46,67,0.3); }
+            50% { transform: scale(1.15); box-shadow: 0 0 35px 8px rgba(255,46,67,0.6); }
+          }
+          @keyframes sparkSwirl {
+            0% { transform: rotate(0deg) scale(1) translate(0, 0); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: rotate(360deg) scale(0.2) translate(-10px, -10px); opacity: 0; }
+          }
+          @keyframes sleepBreath {
+            0%, 100% { transform: scaleY(1) scaleX(1); }
+            50% { transform: scaleY(1.05) scaleX(1.02); }
+          }
+          @keyframes zzzFloat {
+            0% { transform: translate(15px, 0) scale(0.6); opacity: 0; }
+            50% { opacity: 0.8; }
+            100% { transform: translate(30px, -40px) scale(1.2); opacity: 0; }
+          }
+          @keyframes sushiSlide {
+            0% { transform: translateX(-80px) rotate(0deg); }
+            40% { transform: translateX(-10px) rotate(0deg); }
+            50% { transform: translateX(0px) translateY(-20px) rotate(180deg); }
+            60% { transform: translateX(10px) translateY(-20px) rotate(360deg); }
+            70% { transform: translateX(20px) translateY(0deg) rotate(360deg); }
+            100% { transform: translateX(80px) rotate(360deg); }
+          }
+          .animate-magicalwand { animation: magicalWand 2s infinite ease-in-out; }
+          .animate-shinobirun { animation: shinobiRun 0.5s infinite ease-in-out; }
+          .animate-kipulse { animation: kiPulse 1s infinite ease-in-out; }
+          .animate-sleepbreath { animation: sleepBreath 3s infinite ease-in-out; }
+          .animate-sushislide { animation: sushiSlide 2.5s infinite linear; }
         `}</style>
 
         {/* Dynamic Animated Mascot */}
-        <div className="relative flex items-center justify-center min-h-[64px]">
+        <div className="relative flex items-center justify-center min-h-[72px] w-full">
           {loaderIndex === 0 && (
-            <div className="flex flex-col items-center">
-              <div className="text-5xl animate-dinowalk select-none">🦖</div>
-              <div className="w-20 h-1 bg-[#1f212a] rounded-full mt-3 overflow-hidden relative">
-                <div className="absolute top-0 bottom-0 left-0 bg-[#ff2e43] w-1/3 rounded-full" style={{ animation: "dinoWalk 1.6s infinite ease-in-out" }} />
-              </div>
+            <div className="relative w-24 h-20 flex items-center justify-center">
+              <div className="text-5xl animate-magicalwand select-none">🪄</div>
+              <div className="absolute text-lg select-none pointer-events-none" style={{ animation: "sparkFloat1 1.5s infinite ease-out", left: "20%", top: "30%" }}>💖</div>
+              <div className="absolute text-sm select-none pointer-events-none" style={{ animation: "sparkFloat2 1.8s infinite ease-out", right: "20%", top: "20%" }}>✨</div>
+              <div className="absolute text-xs select-none pointer-events-none" style={{ animation: "sparkFloat1 1.2s infinite ease-out", right: "30%", top: "50%" }}>⭐</div>
             </div>
           )}
           {loaderIndex === 1 && (
-            <div className="flex items-center gap-2">
-              <div className="text-5xl animate-nekorun select-none">🐈</div>
-              <div className="text-2xl animate-pulse select-none">🐟</div>
+            <div className="relative w-28 h-20 flex flex-col items-center justify-center overflow-hidden">
+              <div className="text-5xl select-none" style={{ animation: "shinobiRun 0.5s infinite ease-in-out", transformOrigin: "bottom center" }}>🥷</div>
+              <div className="absolute h-0.5 bg-slate-500 rounded-full" style={{ width: "30px", animation: "speedLine 0.5s infinite linear", top: "30%", right: "10%" }} />
+              <div className="absolute h-0.5 bg-[#ff2e43]/40 rounded-full" style={{ width: "45px", animation: "speedLine 0.7s infinite linear", top: "50%", right: "5%", animationDelay: "0.2s" }} />
+              <div className="absolute h-0.5 bg-slate-500 rounded-full" style={{ width: "25px", animation: "speedLine 0.4s infinite linear", top: "70%", right: "15%", animationDelay: "0.1s" }} />
             </div>
           )}
           {loaderIndex === 2 && (
-            <div className="relative w-16 h-16 flex items-center justify-center">
-              <div className="text-5xl animate-wandcast select-none">🪄</div>
-              <div className="absolute text-lg select-none" style={{ animation: "spin 3s infinite linear", transformOrigin: "center" }}>✨</div>
+            <div className="relative w-24 h-20 flex items-center justify-center">
+              <div className="w-10 h-10 bg-[#ff2e43] rounded-full flex items-center justify-center shadow-lg animate-kipulse">
+                <span className="text-white text-xs select-none font-black">⚡</span>
+              </div>
+              <div className="absolute w-20 h-20 border border-[#ff2e43]/20 rounded-full" style={{ animation: "spin 2s infinite linear" }} />
+              <div className="absolute text-sm select-none" style={{ animation: "sparkSwirl 1.5s infinite ease-in-out", transformOrigin: "40px 40px" }}>🔥</div>
+              <div className="absolute text-xs select-none" style={{ animation: "sparkSwirl 1.2s infinite ease-in-out", animationDelay: "0.4s", transformOrigin: "35px 35px" }}>⚡</div>
             </div>
           )}
           {loaderIndex === 3 && (
-            <div className="flex flex-col items-center gap-1.5">
-              <div className="text-5xl animate-arcadepulse select-none">👾</div>
-              <div className="text-[9px] font-mono text-[#ff2e43] font-bold uppercase tracking-widest animate-pulse">Insert Coin</div>
+            <div className="relative w-24 h-20 flex flex-col items-center justify-center">
+              <div className="text-5xl select-none animate-sleepbreath" style={{ transformOrigin: "bottom center" }}>🐼</div>
+              <div className="absolute text-sm select-none" style={{ top: "10%", left: "45%", animation: "magicalWand 3s infinite ease-in-out" }}>🍃</div>
+              <div className="absolute text-xs font-bold text-indigo-400 select-none" style={{ animation: "zzzFloat 2s infinite ease-out" }}>💤</div>
+              <div className="absolute text-[10px] font-bold text-indigo-300 select-none" style={{ animation: "zzzFloat 2s infinite ease-out", animationDelay: "0.8s" }}>💤</div>
             </div>
           )}
           {loaderIndex === 4 && (
-            <div className="flex flex-col items-center">
-              <div className="text-5xl animate-bobashake select-none">🥤</div>
+            <div className="relative w-40 h-20 flex flex-col items-center justify-end overflow-hidden pb-1">
+              <div className="text-4xl select-none absolute animate-sushislide" style={{ bottom: "12px" }}>🍣</div>
+              <div className="w-32 h-0.5 bg-[#1f212a] rounded-full flex justify-between px-6">
+                <span className="text-slate-655 text-[10px] select-none -translate-y-2">🥢</span>
+                <span className="text-slate-655 text-[10px] select-none -translate-y-2">🥢</span>
+              </div>
             </div>
           )}
         </div>
 
         {/* Text Guidelines */}
         <div className="space-y-1.5 max-w-xs">
-          <h3 className="text-sm font-black uppercase tracking-widest text-[#ff2e43] animate-pulse">
+          <h3 className="text-xs font-black uppercase tracking-widest text-[#ff2e43] animate-pulse">
             {loader.text}
           </h3>
           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider leading-relaxed animate-pulse">
