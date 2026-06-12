@@ -1554,6 +1554,13 @@ export default function Home() {
                 <span className="text-[8px] text-slate-500 uppercase tracking-widest font-extrabold">Watcher</span>
               </div>
               <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-slate-100 hover:border-slate-800 rounded-xl transition-all active:scale-95"
+                title="App Settings"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+              <button
                 onClick={handleLogout}
                 className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-[#ff2e43] hover:border-[#ff2e43]/30 rounded-xl transition-all active:scale-95"
                 title="Sign Out"
@@ -2103,6 +2110,15 @@ export default function Home() {
               <span className="font-extrabold text-[#ff2e43]">{(totalWatchHours + totalReadHours).toFixed(1)} Hours</span>
             </div>
           </div>
+
+          {/* Mobile Settings */}
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="w-full py-3.5 bg-[#0f1015] hover:bg-[#1f212a] border border-[#1f212a] text-xs font-extrabold rounded-xl text-slate-300 transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
+          >
+            <Settings className="w-4 h-4" />
+            Extension & App Settings
+          </button>
 
           {/* Mobile Sign Out */}
           <button
