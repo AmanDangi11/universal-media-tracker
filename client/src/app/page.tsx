@@ -1142,6 +1142,26 @@ export default function Home() {
                   Default autodetected. For Android emulators, use <code className="text-slate-450 font-mono">http://10.0.2.2:5000</code>. For local network physical devices, use your computer's local IP (e.g. <code className="text-slate-450 font-mono">http://192.168.1.50:5000</code>).
                 </p>
               </div>
+
+              <div className="border-t border-[#1f212a] pt-4 mt-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                  Chrome Extension Auto-Sync
+                </label>
+                <a
+                  href="/extension.zip"
+                  download
+                  className="inline-flex items-center justify-center gap-2 w-full bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-200 hover:text-white border border-[#1f212a] hover:border-[#ff2e43]/20 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+                >
+                  <span>📥 Download Extension (.zip)</span>
+                </a>
+                <div className="mt-3.5 space-y-1.5 text-[10px] text-slate-550 leading-relaxed font-semibold">
+                  <p className="font-extrabold text-slate-400 uppercase tracking-wider text-[9px] mb-1">Manual Installation Steps:</p>
+                  <p>1. Extract the downloaded <code className="text-slate-450 font-mono">extension.zip</code> file.</p>
+                  <p>2. Open <code className="text-slate-450 font-mono">chrome://extensions/</code> in Google Chrome.</p>
+                  <p>3. Toggle <strong className="text-slate-400 font-bold">Developer mode</strong> (top-right switch) to ON.</p>
+                  <p>4. Click <strong className="text-slate-400 font-bold">Load unpacked</strong> (top-left) and select the extracted folder.</p>
+                </div>
+              </div>
             </div>
 
             {/* Footer */}
