@@ -844,6 +844,15 @@ export default function Home() {
           });
         }
 
+        // Strict name or title check (ignore description search matches returned by fuzzy search APIs)
+        if (modalSearchQuery) {
+          const queryLower = modalSearchQuery.toLowerCase().trim();
+          finalResults = finalResults.filter(item => 
+            item.title.toLowerCase().includes(queryLower) ||
+            item.franchise.toLowerCase().includes(queryLower)
+          );
+        }
+
         setSearchResults(finalResults);
       } catch (error) {
         console.error("Error searching online sources:", error);
