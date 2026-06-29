@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { MediaAggregator } from './services/mediaAggregator';
 import { startBackgroundChecker } from './services/releaseChecker';
+import { EmailService } from './services/emailService';
 
 // Load environment variables
 dotenv.config();
@@ -143,6 +144,124 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Login failed:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Forgot Password Endpoint - Send OTP Code
+app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
+      // For security, do not reveal if the user exists or not. Simply return success.
+      return res.status(200).json({ message: 'If the email exists in our system, a verification code has been sent.' });
+    }
+
+    // Generate 6-digit OTP (100000 to 999999)
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes expiry
+
+    // Save OTP to database user record
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetOtp: otp,
+        resetOtpExpires: expiresAt
+      }
+    });
+
+    // Send email via EmailService
+    const emailSubject = '🔒 Reset Your BingeLog Password';
+    const emailHtml = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+        <h2 style="color: #6366f1; text-align: center;">Forgot Password Verification</h2>
+        <p>Hi <strong>${user.username}</strong>,</p>
+        <p>We received a request to reset your password. Use the verification code below to complete the reset process:</p>
+        <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center;">
+          <h1 style="margin: 0; color: #6366f1; letter-spacing: 5px; font-size: 32px;">${otp}</h1>
+        </div>
+        <p style="color: #ef4444; font-weight: bold; text-align: center;">This code will expire in 15 minutes.</p>
+        <p>If you did not request this, you can safely ignore this email.</p>
+        <p style="font-size: 11px; color: #94a3b8; margin-top: 40px; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
+          Automated message from your Universal Media Tracker / BingeLog.
+        </p>
+      </div>
+    `;
+
+    await EmailService.sendEmail(email, emailSubject, emailHtml);
+
+    res.status(200).json({ message: 'If the email exists in our system, a verification code has been sent.' });
+  } catch (error) {
+    console.error('Forgot password failed:', error);
+    res.status(500).json({ error: 'Forgot password operation failed' });
+  }
+});
+
+// Reset Password Endpoint - Verify OTP and Save New Password
+app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ error: 'Email, verification code, and new password are required' });
+    }
+
+    // Find the user
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user || !user.resetOtp || !user.resetOtpExpires) {
+      return res.status(400).json({ error: 'Invalid reset request or verification code' });
+    }
+
+    // Verify OTP expiration
+    if (new Date() > user.resetOtpExpires) {
+      return res.status(400).json({ error: 'Verification code has expired' });
+    }
+
+    // Verify OTP matching
+    if (user.resetOtp !== otp) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    // Hash the new password
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // Save new password hash and clear reset OTP fields
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        resetOtp: null,
+        resetOtpExpires: null
+      }
+    });
+
+    // Automatically sign session token for login after reset
+    const token = jwt.sign({ userId: updatedUser.id }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.status(200).json({
+      message: 'Password reset successful',
+      token,
+      user: {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        email: updatedUser.email
+      }
+    });
+  } catch (error) {
+    console.error('Reset password failed:', error);
+    res.status(500).json({ error: 'Reset password operation failed' });
   }
 });
 

@@ -194,16 +194,16 @@ const getApiBaseUrl = () => {
     if (isCapacitor) {
       const cap = (window as any).Capacitor;
       if (cap.getPlatform() === "android") {
-        return "http://10.0.2.2:5000";
+        return "http://10.0.2.2:5001";
       }
-      return "http://localhost:5000";
+      return "http://localhost:5001";
     }
     if (window.location.hostname === "14df525de8d485.lhr.life" || window.location.hostname === "3369ccf4201b95.lhr.life") {
       return "https://ad35b38df0678b.lhr.life";
     }
-    return `http://${window.location.hostname}:5000`;
+    return `http://${window.location.hostname}:5001`;
   }
-  return "http://localhost:5000";
+  return "http://localhost:5001";
 };
 
 const THEMES: Record<string, {
@@ -334,10 +334,15 @@ export default function Home() {
   const [user, setUser] = useState<{ id: string; username: string; email: string } | null>(null);
   const [authError, setAuthError] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [usernameInput, setUsernameInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
+  const [otpInput, setOtpInput] = useState("");
+  const [newPasswordInput, setNewPasswordInput] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   // Add Media Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -644,6 +649,71 @@ export default function Home() {
       setUser(data.user);
       setEmailInput("");
       setPasswordInput("");
+    } catch (err) {
+      setAuthError("Failed to connect to the server");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailInput) {
+      setAuthError("Email is required");
+      return;
+    }
+    setAuthError("");
+    setSuccessMessage("");
+    setAuthLoading(true);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailInput })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || "Failed to request OTP");
+        return;
+      }
+      setSuccessMessage(data.message || "Verification code sent successfully!");
+      setIsResettingPassword(true);
+    } catch (err) {
+      setAuthError("Failed to connect to the server");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailInput || !otpInput || !newPasswordInput) {
+      setAuthError("All fields are required");
+      return;
+    }
+    setAuthError("");
+    setSuccessMessage("");
+    setAuthLoading(true);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailInput, otp: otpInput, newPassword: newPasswordInput })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || "Failed to reset password");
+        return;
+      }
+      localStorage.setItem("umt_token", data.token);
+      localStorage.setItem("umt_user", JSON.stringify(data.user));
+      setToken(data.token);
+      setUser(data.user);
+      setEmailInput("");
+      setOtpInput("");
+      setNewPasswordInput("");
+      setIsForgotPassword(false);
+      setIsResettingPassword(false);
     } catch (err) {
       setAuthError("Failed to connect to the server");
     } finally {
@@ -1384,84 +1454,190 @@ export default function Home() {
             </div>
 
             {/* Form Content */}
-            <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
-              <h2 className="text-xs font-bold uppercase tracking-widest text-[#ff2e43] mb-2">
-                {isRegistering ? "Create Account" : "Access Watchlist"}
-              </h2>
+            {isForgotPassword ? (
+              <form onSubmit={isResettingPassword ? handleResetPassword : handleForgotPassword} className="space-y-4">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-[#ff2e43] mb-2">
+                  {isResettingPassword ? "Reset Password" : "Forgot Password"}
+                </h2>
 
-              {authError && (
-                <div className="p-3 bg-red-950/20 border border-[#ff2e43]/30 text-[#ff2e43] text-xs font-semibold rounded-xl">
-                  ⚠️ {authError}
-                </div>
-              )}
+                {authError && (
+                  <div className="p-3 bg-red-950/20 border border-[#ff2e43]/30 text-[#ff2e43] text-xs font-semibold rounded-xl">
+                    ⚠️ {authError}
+                  </div>
+                )}
 
-              {isRegistering && (
+                {successMessage && (
+                  <div className="p-3 bg-emerald-950/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold rounded-xl">
+                    ✓ {successMessage}
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase font-bold text-slate-400">Username</label>
+                  <label className="text-[10px] uppercase font-bold text-slate-400">Email Address</label>
                   <input
-                    type="text"
-                    placeholder="Enter username"
-                    value={usernameInput}
-                    onChange={(e) => setUsernameInput(e.target.value)}
-                    className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                    autoComplete="username"
+                    type="email"
+                    placeholder="Enter email address"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    disabled={isResettingPassword}
+                    className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold disabled:opacity-50"
+                    autoComplete="email"
                     required
                   />
                 </div>
-              )}
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Email Address</label>
-                <input
-                  type="email"
-                  placeholder="Enter email address"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                  autoComplete="email"
-                  required
-                />
-              </div>
+                {isResettingPassword && (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-bold text-slate-400">Verification Code</label>
+                      <input
+                        type="text"
+                        placeholder="Enter 6-digit code"
+                        value={otpInput}
+                        onChange={(e) => setOtpInput(e.target.value)}
+                        className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                        required
+                      />
+                    </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Password</label>
-                <input
-                  type="password"
-                  placeholder="Enter password"
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                  autoComplete={isRegistering ? "new-password" : "current-password"}
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={authLoading}
-                className="w-full py-3.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-[#ff2e43]/20 active:scale-95 flex items-center justify-center gap-2 min-h-[44px] mt-6"
-              >
-                {authLoading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : isRegistering ? (
-                  "Create Free Account"
-                ) : (
-                  "Sign In"
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-bold text-slate-400">New Password</label>
+                      <input
+                        type="password"
+                        placeholder="Enter new password"
+                        value={newPasswordInput}
+                        onChange={(e) => setNewPasswordInput(e.target.value)}
+                        className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                        required
+                      />
+                    </div>
+                  </>
                 )}
-              </button>
-            </form>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-3.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-[#ff2e43]/20 active:scale-95 flex items-center justify-center gap-2 min-h-[44px] mt-6"
+                >
+                  {authLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : isResettingPassword ? (
+                    "Reset Password & Sign In"
+                  ) : (
+                    "Send Verification Code"
+                  )}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-[#ff2e43] mb-2">
+                  {isRegistering ? "Create Account" : "Access Watchlist"}
+                </h2>
+
+                {authError && (
+                  <div className="p-3 bg-red-950/20 border border-[#ff2e43]/30 text-[#ff2e43] text-xs font-semibold rounded-xl">
+                    ⚠️ {authError}
+                  </div>
+                )}
+
+                {isRegistering && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-bold text-slate-400">Username</label>
+                    <input
+                      type="text"
+                      placeholder="Enter username"
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value)}
+                      className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                      autoComplete="username"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-slate-400">Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="Enter email address"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] uppercase font-bold text-slate-400">Password</label>
+                    {!isRegistering && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsForgotPassword(true);
+                          setAuthError("");
+                          setSuccessMessage("");
+                        }}
+                        className="text-[10px] font-bold text-[#ff2e43] hover:underline focus:outline-none"
+                      >
+                        Forgot Password?
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="Enter password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                    autoComplete={isRegistering ? "new-password" : "current-password"}
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-3.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-[#ff2e43]/20 active:scale-95 flex items-center justify-center gap-2 min-h-[44px] mt-6"
+                >
+                  {authLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : isRegistering ? (
+                    "Create Free Account"
+                  ) : (
+                    "Sign In"
+                  )}
+                </button>
+              </form>
+            )}
 
             {/* Form Switcher */}
             <div className="mt-6 pt-4 border-t border-[#1f212a] text-center">
-              <button
-                onClick={() => {
-                  setIsRegistering(!isRegistering);
-                  setAuthError("");
-                }}
-                className="text-[11px] font-bold text-slate-400 hover:text-[#ff2e43] transition-all"
-              >
-                {isRegistering ? "Already have an account? Sign In" : "Don't have an account yet? Register here"}
-              </button>
+              {isForgotPassword ? (
+                <button
+                  onClick={() => {
+                    setIsForgotPassword(false);
+                    setIsResettingPassword(false);
+                    setAuthError("");
+                    setSuccessMessage("");
+                  }}
+                  className="text-[11px] font-bold text-slate-400 hover:text-[#ff2e43] transition-all"
+                >
+                  Back to Sign In
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setIsRegistering(!isRegistering);
+                    setAuthError("");
+                    setSuccessMessage("");
+                  }}
+                  className="text-[11px] font-bold text-slate-400 hover:text-[#ff2e43] transition-all"
+                >
+                  {isRegistering ? "Already have an account? Sign In" : "Don't have an account yet? Register here"}
+                </button>
+              )}
             </div>
           </div>
         </div>

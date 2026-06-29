@@ -1,5 +1,5 @@
 // Background Service Worker for Universal Media Tracker
-const DEFAULT_API_URL = 'http://localhost:5000';
+const DEFAULT_API_URL = 'http://localhost:5001';
 
 // In-memory mapping of tabId -> active media info (supports cross-origin iframe progress matching)
 const activeTabMedia = {};

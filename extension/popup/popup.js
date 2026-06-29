@@ -1,5 +1,5 @@
 // Popup interface logic for Universal Media Tracker Extension
-const DEFAULT_API_URL = 'http://localhost:5000';
+const DEFAULT_API_URL = 'http://localhost:5001';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const apiUrlInput = document.getElementById('apiUrl');
@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (settings.umt_api_url) {
     apiUrlInput.value = settings.umt_api_url;
     // Update dashboard link dynamically if user has a custom frontend host
-    const baseDomain = settings.umt_api_url.replace(':5000', ':3000').replace('/api', '');
+    const baseDomain = settings.umt_api_url.replace(':5001', ':3000').replace('/api', '');
     webAppLink.href = baseDomain;
   } else {
     apiUrlInput.value = DEFAULT_API_URL;
@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Update Web App link
-    const baseDomain = apiUrl.replace(':5000', ':3000').replace('/api', '');
+    const baseDomain = apiUrl.replace(':5001', ':3000').replace('/api', '');
     webAppLink.href = baseDomain;
 
     // Show success visual indicator
