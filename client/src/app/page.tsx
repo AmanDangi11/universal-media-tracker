@@ -31,7 +31,8 @@ import {
   User,
   Trash2,
   Puzzle,
-  Palette
+  Palette,
+  Key
 } from "lucide-react";
 
 // Types
@@ -364,6 +365,15 @@ export default function Home() {
   // Settings & Custom API URL configuration
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [customApiUrl, setCustomApiUrl] = useState("");
+
+  // Change Password state
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [currentPasswordInput, setCurrentPasswordInput] = useState("");
+  const [changePasswordNewInput, setChangePasswordNewInput] = useState("");
+  const [changePasswordConfirmInput, setChangePasswordConfirmInput] = useState("");
+  const [changePasswordError, setChangePasswordError] = useState("");
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState("");
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
 
   // Set isMounted to true on client mount to bypass Next.js hydration issues
   useEffect(() => {
@@ -727,6 +737,54 @@ export default function Home() {
     setToken(null);
     setUser(null);
     setMediaList([]);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPasswordInput || !changePasswordNewInput || !changePasswordConfirmInput) {
+      setChangePasswordError("All fields are required");
+      setChangePasswordSuccess("");
+      return;
+    }
+    if (changePasswordNewInput.length < 6) {
+      setChangePasswordError("New password must be at least 6 characters");
+      setChangePasswordSuccess("");
+      return;
+    }
+    if (changePasswordNewInput !== changePasswordConfirmInput) {
+      setChangePasswordError("New passwords do not match");
+      setChangePasswordSuccess("");
+      return;
+    }
+    setChangePasswordError("");
+    setChangePasswordSuccess("");
+    setChangePasswordLoading(true);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/change-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          currentPassword: currentPasswordInput,
+          newPassword: changePasswordNewInput
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setChangePasswordError(data.error || "Failed to change password");
+        return;
+      }
+      setChangePasswordSuccess(data.message || "Password changed successfully!");
+      setCurrentPasswordInput("");
+      setChangePasswordNewInput("");
+      setChangePasswordConfirmInput("");
+    } catch (err) {
+      setChangePasswordError("Failed to connect to the server");
+    } finally {
+      setChangePasswordLoading(false);
+    }
   };
 
   // Calculate watch and read hours
@@ -1817,6 +1875,132 @@ export default function Home() {
         </div>
       )}
 
+      {/* CHANGE PASSWORD MODAL */}
+      {isChangePasswordOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
+          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
+
+            {/* Header */}
+            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
+              <div className="flex items-center gap-2">
+                <Key className="w-5 h-5 text-[#ff2e43]" />
+                <h2 className="text-base font-bold text-slate-100">Change Password</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChangePasswordOpen(false);
+                  setChangePasswordError("");
+                  setChangePasswordSuccess("");
+                  setCurrentPasswordInput("");
+                  setChangePasswordNewInput("");
+                  setChangePasswordConfirmInput("");
+                }}
+                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <form onSubmit={handleChangePassword} className="flex flex-col flex-1">
+              <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+                {changePasswordError && (
+                  <div className="p-3 bg-red-950/30 border border-red-500/20 text-[#ff2e43] rounded-xl text-xs font-semibold animate-in fade-in duration-250">
+                    {changePasswordError}
+                  </div>
+                )}
+                {changePasswordSuccess && (
+                  <div className="p-3 bg-emerald-950/30 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs font-semibold animate-in fade-in duration-250">
+                    {changePasswordSuccess}
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-450">
+                    Current Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={currentPasswordInput}
+                    onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                    placeholder="Enter current password"
+                    className="w-full px-4 py-3 bg-[#050608] border border-[#1f212a] hover:border-slate-800 focus:border-[#ff2e43] focus:ring-1 focus:ring-[#ff2e43] rounded-xl text-xs font-semibold text-slate-200 placeholder-slate-600 transition-all outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-450">
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={changePasswordNewInput}
+                    onChange={(e) => setChangePasswordNewInput(e.target.value)}
+                    placeholder="Min 6 characters"
+                    className="w-full px-4 py-3 bg-[#050608] border border-[#1f212a] hover:border-slate-800 focus:border-[#ff2e43] focus:ring-1 focus:ring-[#ff2e43] rounded-xl text-xs font-semibold text-slate-200 placeholder-slate-600 transition-all outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-450">
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={changePasswordConfirmInput}
+                    onChange={(e) => setChangePasswordConfirmInput(e.target.value)}
+                    placeholder="Confirm new password"
+                    className="w-full px-4 py-3 bg-[#050608] border border-[#1f212a] hover:border-slate-800 focus:border-[#ff2e43] focus:ring-1 focus:ring-[#ff2e43] rounded-xl text-xs font-semibold text-slate-200 placeholder-slate-600 transition-all outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-end gap-3 px-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsChangePasswordOpen(false);
+                    setChangePasswordError("");
+                    setChangePasswordSuccess("");
+                    setCurrentPasswordInput("");
+                    setChangePasswordNewInput("");
+                    setChangePasswordConfirmInput("");
+                  }}
+                  className="px-5 py-2.5 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-350 rounded-xl text-xs font-bold transition-all active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={changePasswordLoading}
+                  className="px-5 py-2.5 bg-[#ff2e43] hover:bg-[#e02034] disabled:bg-[#ff2e43]/50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 shadow-[#ff2e43]/15 flex items-center gap-2"
+                >
+                  {changePasswordLoading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Updating...
+                    </>
+                  ) : (
+                    "Update Password"
+                  )}
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
+
       {/* DYNAMIC 'ADD MEDIA' DIALOG MODAL (Fully Mobile-Friendly) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
@@ -2211,6 +2395,13 @@ export default function Home() {
                 title="Theme Customization"
               >
                 <Palette className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setIsChangePasswordOpen(true)}
+                className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-slate-100 hover:border-slate-800 rounded-xl transition-all active:scale-95"
+                title="Change Password"
+              >
+                <Key className="w-4 h-4" />
               </button>
               <button
                 onClick={handleLogout}
@@ -2794,6 +2985,14 @@ export default function Home() {
           >
             <Palette className="w-4 h-4" />
             Theme Customization
+          </button>
+
+          <button
+            onClick={() => setIsChangePasswordOpen(true)}
+            className="w-full py-3.5 bg-[#0f1015] hover:bg-[#1f212a] border border-[#1f212a] text-xs font-extrabold rounded-xl text-slate-300 transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
+          >
+            <Key className="w-4 h-4" />
+            Change Password
           </button>
 
           {/* Mobile Sign Out */}
