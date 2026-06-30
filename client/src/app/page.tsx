@@ -375,6 +375,11 @@ export default function Home() {
   const [changePasswordSuccess, setChangePasswordSuccess] = useState("");
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
 
+  // Import / Export state
+  const [isImportExportOpen, setIsImportExportOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   // Set isMounted to true on client mount to bypass Next.js hydration issues
   useEffect(() => {
     setIsMounted(true);
@@ -784,6 +789,83 @@ export default function Home() {
       setChangePasswordError("Failed to connect to the server");
     } finally {
       setChangePasswordLoading(false);
+    }
+  };
+
+  const handleExportWatchlist = async () => {
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/watchlist/export`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        throw new Error("Failed to export watchlist");
+      }
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `watchlist-export-${user?.username || "user"}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to export watchlist. Please try again.");
+    }
+  };
+
+  const handleImportWatchlist = async (file: File) => {
+    if (!file) return;
+    setIsImporting(true);
+    setImportMessage(null);
+    try {
+      const text = await file.text();
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (parseErr) {
+        setImportMessage({ type: "error", text: "Invalid JSON format. Please upload a valid JSON file." });
+        setIsImporting(false);
+        return;
+      }
+
+      let payload: any = {};
+      if (Array.isArray(parsed)) {
+        payload = { items: parsed };
+      } else if (parsed && typeof parsed === "object" && Array.isArray(parsed.lists)) {
+        payload = { anilistData: parsed };
+      } else {
+        setImportMessage({ type: "error", text: "Watchlist data must be a JSON array or a valid AniList export." });
+        setIsImporting(false);
+        return;
+      }
+
+      const res = await fetch(`${getApiBaseUrl()}/api/watchlist/import`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setImportMessage({ type: "error", text: data.error || "Failed to import watchlist." });
+        return;
+      }
+
+      setImportMessage({ type: "success", text: `Watchlist imported successfully! Loaded ${data.count} items.` });
+      fetchWatchlist();
+    } catch (err) {
+      setImportMessage({ type: "error", text: "An error occurred during import. Please try again." });
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -2001,6 +2083,113 @@ export default function Home() {
         </div>
       )}
 
+      {/* IMPORT / EXPORT MODAL */}
+      {isImportExportOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
+
+            {/* Header */}
+            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
+              <div className="flex items-center gap-2">
+                <Database className="w-5 h-5 text-[#ff2e43]" />
+                <h2 className="text-base font-bold text-slate-100">Import / Export Watchlist</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsImportExportOpen(false);
+                  setImportMessage(null);
+                }}
+                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
+              {importMessage && (
+                <div
+                  className={`p-3 border rounded-xl text-xs font-semibold animate-in fade-in duration-250 ${
+                    importMessage.type === "success"
+                      ? "bg-emerald-955/20 border-emerald-500/30 text-emerald-450"
+                      : "bg-red-955/20 border-red-500/30 text-[#ff2e43]"
+                  }`}
+                >
+                  {importMessage.text}
+                </div>
+              )}
+
+              {/* Export Section */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-450">Export Watchlist</h3>
+                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                  Download a backup file of your entire watchlist including media titles, progress records, ratings, and status.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleExportWatchlist}
+                  className="w-full py-3 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-200 hover:text-white border border-[#1f212a] hover:border-[#ff2e43]/25 rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <span>📤 Download Backup JSON</span>
+                </button>
+              </div>
+
+              {/* Import Section */}
+              <div className="space-y-3 pt-4 border-t border-[#1f212a]">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-450">Import Watchlist</h3>
+                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                  Upload a previously exported `.json` file to restore your watchlist or import entries from another tracker.
+                </p>
+
+                {/* Drag and drop zone */}
+                <div className="relative group border-2 border-dashed border-[#1f212a] hover:border-[#ff2e43]/20 rounded-2xl p-6 text-center transition-all bg-[#050608]/40">
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImportWatchlist(file);
+                    }}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    disabled={isImporting}
+                  />
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Database className="w-8 h-8 text-slate-600 group-hover:text-[#ff2e43] transition-colors" />
+                    {isImporting ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <div className="w-3.5 h-3.5 border-2 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
+                        <span>Processing backup file...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-xs font-bold text-slate-300">Drag & Drop or Click to Select File</p>
+                        <p className="text-[9px] text-slate-500 font-medium">Supports JSON watchlist exports</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-end px-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsImportExportOpen(false);
+                  setImportMessage(null);
+                }}
+                className="px-5 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* DYNAMIC 'ADD MEDIA' DIALOG MODAL (Fully Mobile-Friendly) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
@@ -2402,6 +2591,13 @@ export default function Home() {
                 title="Change Password"
               >
                 <Key className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setIsImportExportOpen(true)}
+                className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-slate-100 hover:border-slate-800 rounded-xl transition-all active:scale-95"
+                title="Import/Export Watchlist"
+              >
+                <Database className="w-4 h-4" />
               </button>
               <button
                 onClick={handleLogout}
@@ -2993,6 +3189,14 @@ export default function Home() {
           >
             <Key className="w-4 h-4" />
             Change Password
+          </button>
+
+          <button
+            onClick={() => setIsImportExportOpen(true)}
+            className="w-full py-3.5 bg-[#0f1015] hover:bg-[#1f212a] border border-[#1f212a] text-xs font-extrabold rounded-xl text-slate-300 transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
+          >
+            <Database className="w-4 h-4" />
+            Import / Export Watchlist
           </button>
 
           {/* Mobile Sign Out */}

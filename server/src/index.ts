@@ -422,6 +422,290 @@ app.get('/api/watchlist', authenticateToken, async (req: AuthenticatedRequest, r
   }
 });
 
+// Export Watchlist as JSON
+app.get('/api/watchlist/export', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const list = await prisma.userMediaProgress.findMany({
+      where: { userId: req.userId },
+      include: {
+        media: true
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    const exportData = list.map(item => ({
+      title: item.media.titleEnglish,
+      type: item.media.type,
+      coverImage: item.media.coverImage,
+      synopsis: item.media.synopsis,
+      status: item.status,
+      currentProgress: item.currentProgress,
+      totalProgress: item.media.totalEpisodes || item.media.totalChapters || 12,
+      progressType: item.media.type === 'ANIME' || item.media.type === 'TV_SHOW' ? 'episode' : 'chapter',
+      rating: item.rating,
+      startedAt: item.startedAt,
+      completedAt: item.completedAt
+    }));
+
+    res.json(exportData);
+  } catch (error) {
+    console.error('Export watchlist failed:', error);
+    res.status(500).json({ error: 'Failed to export watchlist' });
+  }
+});
+
+// Helper to fetch AniList details in batches of 50
+async function fetchAniListMediaBatch(ids: number[]) {
+  const query = `
+    query ($ids: [Int]) {
+      Page(page: 1, perPage: 50) {
+        media(id_in: $ids) {
+          id
+          type
+          title {
+            english
+            romaji
+            native
+          }
+          description
+          coverImage {
+            large
+          }
+          bannerImage
+          status
+          episodes
+          chapters
+          volumes
+        }
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        variables: { ids }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`AniList returned status ${response.status}`);
+    }
+
+    const json = await response.json();
+    return json.data?.Page?.media || [];
+  } catch (err) {
+    console.error(`Failed to fetch batch from AniList:`, err);
+    return [];
+  }
+}
+
+// Import Watchlist from JSON (Supports UMT layout or AniList GDPR dump layouts)
+app.post('/api/watchlist/import', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { items, anilistData } = req.body;
+
+    if (!items && !anilistData) {
+      return res.status(400).json({ error: 'Invalid payload: items or anilistData is required' });
+    }
+
+    let importCount = 0;
+
+    if (items && Array.isArray(items)) {
+      // Standard Import Format
+      for (const item of items) {
+        if (!item.title || !item.type) {
+          continue;
+        }
+
+        // Find or create global Media record
+        let media = await prisma.media.findFirst({
+          where: { titleEnglish: item.title }
+        });
+
+        if (!media) {
+          const resolvedTotalEpisodes = item.type === 'ANIME' || item.type === 'TV_SHOW' || item.type === 'MOVIE' ? item.totalProgress : null;
+          const resolvedTotalChapters = item.type === 'MANGA' || item.type === 'LIGHT_NOVEL' ? item.totalProgress : null;
+
+          media = await prisma.media.create({
+            data: {
+              type: item.type,
+              titleEnglish: item.title,
+              titleRomaji: `${item.title} Franchise`,
+              coverImage: item.coverImage || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+              synopsis: item.synopsis || '',
+              status: item.type === 'MOVIE' ? 'FINISHED' : 'RELEASING',
+              totalEpisodes: resolvedTotalEpisodes,
+              totalChapters: resolvedTotalChapters
+            }
+          });
+        } else if (item.totalProgress) {
+          // Update total episodes/chapters if different
+          const isAnimeTv = item.type === 'ANIME' || item.type === 'TV_SHOW';
+          if (isAnimeTv && media.totalEpisodes !== item.totalProgress) {
+            await prisma.media.update({
+              where: { id: media.id },
+              data: { totalEpisodes: item.totalProgress }
+            });
+          } else if (!isAnimeTv && media.totalChapters !== item.totalProgress) {
+            await prisma.media.update({
+              where: { id: media.id },
+              data: { totalChapters: item.totalProgress }
+            });
+          }
+        }
+
+        // Check if UserMediaProgress already exists for this user/media
+        const existingProgress = await prisma.userMediaProgress.findFirst({
+          where: {
+            userId: req.userId,
+            mediaId: media.id
+          }
+        });
+
+        if (existingProgress) {
+          await prisma.userMediaProgress.update({
+            where: { id: existingProgress.id },
+            data: {
+              currentProgress: item.currentProgress !== undefined ? item.currentProgress : existingProgress.currentProgress,
+              status: item.status || existingProgress.status,
+              rating: item.rating !== undefined ? item.rating : existingProgress.rating,
+              startedAt: item.startedAt ? new Date(item.startedAt) : existingProgress.startedAt,
+              completedAt: item.completedAt ? new Date(item.completedAt) : existingProgress.completedAt
+            }
+          });
+        } else {
+          await prisma.userMediaProgress.create({
+            data: {
+              userId: req.userId!,
+              mediaId: media.id,
+              currentProgress: item.currentProgress || 0,
+              status: item.status || 'PLANNING',
+              rating: item.rating || null,
+              startedAt: item.startedAt ? new Date(item.startedAt) : null,
+              completedAt: item.completedAt ? new Date(item.completedAt) : null
+            }
+          });
+        }
+
+        importCount++;
+      }
+    } else if (anilistData && Array.isArray(anilistData.lists)) {
+      // AniList Import Format
+      const lists = anilistData.lists;
+
+      // 1. Filter out entries we already have in our database by anilistId to avoid unnecessary API requests
+      const anilistIds = lists.map((item: any) => item.series_id).filter(Boolean);
+      const existingMediaList = await prisma.media.findMany({
+        where: { anilistId: { in: anilistIds } }
+      });
+      const existingMediaMap = new Map(existingMediaList.map(m => [m.anilistId, m]));
+
+      // 2. Identify missing anilistIds
+      const missingIds = anilistIds.filter((id: number) => !existingMediaMap.has(id));
+
+      // 3. Batch fetch missing media details from AniList in chunks of 50
+      const fetchedMediaMap = new Map<number, any>();
+      for (let i = 0; i < missingIds.length; i += 50) {
+        const chunk = missingIds.slice(i, i + 50);
+        const chunkResults = await fetchAniListMediaBatch(chunk);
+        for (const item of chunkResults) {
+          fetchedMediaMap.set(item.id, item);
+        }
+        // Small delay between chunks to respect API limits
+        if (i + 50 < missingIds.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      // 4. Create missing Media entries and UserMediaProgress records
+      for (const item of lists) {
+        if (!item.series_id) continue;
+
+        let media = existingMediaMap.get(item.series_id);
+
+        if (!media) {
+          const mediaData = fetchedMediaMap.get(item.series_id);
+          if (!mediaData) {
+            continue; // Skip if we couldn't resolve details from AniList API
+          }
+
+          // Create Media
+          media = await prisma.media.create({
+            data: {
+              type: mediaData.type, // 'ANIME' or 'MANGA'
+              titleEnglish: mediaData.title.english || mediaData.title.romaji || mediaData.title.native,
+              titleRomaji: mediaData.title.romaji,
+              titleNative: mediaData.title.native,
+              synopsis: mediaData.description || '',
+              coverImage: mediaData.coverImage?.large || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+              bannerImage: mediaData.bannerImage,
+              status: mediaData.status === 'FINISHED' ? 'FINISHED' : 'RELEASING',
+              totalEpisodes: mediaData.episodes,
+              totalChapters: mediaData.chapters,
+              totalVolumes: mediaData.volumes,
+              anilistId: item.series_id
+            }
+          });
+          existingMediaMap.set(item.series_id, media);
+        }
+
+        // Map status
+        // AniList: 1 = CURRENT, 2 = COMPLETED, 3 = ON_HOLD, 4 = DROPPED, 5 = PLANNING, 6 = REPEATING
+        let mappedStatus: 'CURRENT' | 'COMPLETED' | 'ON_HOLD' | 'DROPPED' | 'PLANNING' = 'PLANNING';
+        if (item.status === 1 || item.status === 6) mappedStatus = 'CURRENT';
+        else if (item.status === 2) mappedStatus = 'COMPLETED';
+        else if (item.status === 3) mappedStatus = 'ON_HOLD';
+        else if (item.status === 4) mappedStatus = 'DROPPED';
+
+        // Check if progress already exists
+        const existingProgress = await prisma.userMediaProgress.findFirst({
+          where: {
+            userId: req.userId,
+            mediaId: media.id
+          }
+        });
+
+        const resolvedRating = item.score && item.score > 0 ? Number(item.score) : null;
+
+        if (existingProgress) {
+          await prisma.userMediaProgress.update({
+            where: { id: existingProgress.id },
+            data: {
+              currentProgress: item.progress !== undefined ? item.progress : existingProgress.currentProgress,
+              status: mappedStatus,
+              rating: resolvedRating !== null ? resolvedRating : existingProgress.rating
+            }
+          });
+        } else {
+          await prisma.userMediaProgress.create({
+            data: {
+              userId: req.userId!,
+              mediaId: media.id,
+              currentProgress: item.progress || 0,
+              status: mappedStatus,
+              rating: resolvedRating
+            }
+          });
+        }
+
+        importCount++;
+      }
+    }
+
+    res.json({ success: true, count: importCount });
+  } catch (error) {
+    console.error('Import watchlist failed:', error);
+    res.status(500).json({ error: 'Failed to import watchlist' });
+  }
+});
+
 // Add Media item to Watchlist
 app.post('/api/watchlist/add', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -681,6 +965,7 @@ app.get('/health', async (_req: Request, res: Response) => {
   }
 });
 
+
 // Real-time Third-Party Catalog Search Gateway
 app.get('/api/search', async (req: Request, res: Response) => {
   try {
@@ -698,7 +983,7 @@ app.get('/api/search', async (req: Request, res: Response) => {
     if ((isTv || isMovie) && apiKey && apiKey !== 'your_tmdb_api_key_here') {
       const mediaType = isTv ? 'tv' : 'movie';
       const url = `https://api.themoviedb.org/3/search/${mediaType}?api_key=${apiKey}&query=${encodeURIComponent(q)}&language=en-US`;
-      
+
       const response = await axios.get(url);
       const results = response.data?.results || [];
 
@@ -780,19 +1065,33 @@ app.get('/api/search', async (req: Request, res: Response) => {
         const tvmazeSearchUrl = `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(q)}`;
         const searchRes = await axios.get(tvmazeSearchUrl, { timeout: 5000 });
         const matches = searchRes.data || [];
-        
-        const topMatches = matches.slice(0, 4);
+
+        const filteredMatches = matches.filter((matchItem: any) => {
+          const show = matchItem.show;
+          if (!show) return false;
+          if (show.language === 'Hindi' && show.network !== null) {
+            return false;
+          }
+          return true;
+        });
+
+        const topMatches = filteredMatches.slice(0, 4);
         const expanded: any[] = [];
-        
+        const foundImdbIds = new Set<string>();
+
         await Promise.all(topMatches.map(async (matchItem: any) => {
           const show = matchItem.show;
           if (!show) return;
-          
+
+          if (show.externals?.imdb) {
+            foundImdbIds.add(show.externals.imdb);
+          }
+
           try {
             const seasonsUrl = `https://api.tvmaze.com/shows/${show.id}/seasons`;
             const seasonsRes = await axios.get(seasonsUrl, { timeout: 3000 });
             const seasons = seasonsRes.data || [];
-            
+
             seasons.forEach((season: any) => {
               if (season.number && (season.episodeOrder || 1) > 0) {
                 expanded.push({
@@ -823,6 +1122,42 @@ app.get('/api/search', async (req: Request, res: Response) => {
             });
           }
         }));
+
+        // Fetch fallback from Justwatch to capture Indian web series that are not indexed in TVmaze
+        try {
+          const jwUrl = `https://imdb.iamidiotareyoutoo.com/justwatch?q=${encodeURIComponent(q)}`;
+          const jwResponse = await axios.get(jwUrl, { timeout: 5000 });
+          const items = jwResponse.data?.description || [];
+          
+          items.forEach((item: any) => {
+            if (item.type !== 'SHOW' || !item.imdbId || foundImdbIds.has(item.imdbId)) {
+              return;
+            }
+            
+            const isIndian = item.url && item.url.includes('/in/');
+            const rating = item.jwRating;
+            
+            if (isIndian) {
+              if (rating !== null && rating < 0.35) return;
+              if (item.year && item.year < 2015) return;
+            }
+
+            expanded.push({
+              id: `imdb-tv-${item.imdbId}`,
+              type: 'TV_SHOW' as const,
+              title: item.title,
+              franchise: `${item.title} Franchise`,
+              coverImage: item.photo_url?.[0] || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
+              synopsis: `Year: ${item.year || 'N/A'}. AKA: ${item.title}. (Web Series)`,
+              totalProgress: 12,
+              progressType: 'episode' as const,
+              externalId: `imdb-tv-${item.imdbId}`
+            });
+          });
+        } catch (jwErr) {
+          console.error("Justwatch search error in TV_SHOW:", jwErr);
+        }
+
         dynamicResults = expanded;
       } else if (type === 'MOVIE') {
         const imdbUrl = `https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(q)}`;
@@ -845,8 +1180,17 @@ app.get('/api/search', async (req: Request, res: Response) => {
           const tvmazeSearchUrl = `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(q)}`;
           const searchRes = await axios.get(tvmazeSearchUrl, { timeout: 4000 });
           const matches = searchRes.data || [];
-          
-          await Promise.all(matches.slice(0, 2).map(async (matchItem: any) => {
+
+          const filteredMatches = matches.filter((matchItem: any) => {
+            const show = matchItem.show;
+            if (!show) return false;
+            if (show.language === 'Hindi' && show.network !== null) {
+              return false;
+            }
+            return true;
+          });
+
+          await Promise.all(filteredMatches.slice(0, 2).map(async (matchItem: any) => {
             const show = matchItem.show;
             if (!show) return;
             try {
@@ -886,21 +1230,38 @@ app.get('/api/search', async (req: Request, res: Response) => {
 
         let mappedMovies: any[] = [];
         try {
-          const imdbUrl = `https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(q)}`;
-          const imdbResponse = await axios.get(imdbUrl, { timeout: 4000 });
-          const items = imdbResponse.data?.description || [];
-          mappedMovies = items.slice(0, 5).map((movie: any) => ({
-            id: `imdb-movie-${movie['#IMDB_ID']}`,
-            type: 'MOVIE' as const,
-            title: `${movie['#TITLE']} (Movie)`,
-            franchise: `${movie['#TITLE'] || 'Unknown'} Franchise`,
-            coverImage: movie['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
-            synopsis: `Year: ${movie['#YEAR'] || 'N/A'}. Starring: ${movie['#ACTORS'] || 'N/A'}. AKA: ${movie['#AKA'] || 'N/A'}.`,
-            totalProgress: 1,
-            progressType: 'episode' as const
-          }));
+          const jwSearchUrl = `https://imdb.iamidiotareyoutoo.com/justwatch?q=${encodeURIComponent(q)}`;
+          const jwResponse = await axios.get(jwSearchUrl, { timeout: 4000 });
+          const items = jwResponse.data?.description || [];
+          
+          const filteredJwItems = items.filter((item: any) => {
+            if (item.type !== 'SHOW' && item.type !== 'MOVIE') return false;
+            
+            const isIndian = item.url && item.url.includes('/in/');
+            const rating = item.jwRating;
+            
+            if (item.type === 'SHOW' && isIndian) {
+              if (rating !== null && rating < 0.35) return false;
+              if (item.year && item.year < 2015) return false;
+            }
+            return true;
+          });
+
+          mappedMovies = filteredJwItems.slice(0, 5).map((item: any) => {
+            const isTV = item.type === 'SHOW';
+            return {
+              id: isTV ? `imdb-tv-${item.imdbId || item.id}` : `imdb-movie-${item.imdbId || item.id}`,
+              type: isTV ? ('TV_SHOW' as const) : ('MOVIE' as const),
+              title: isTV ? `${item.title} (Series)` : `${item.title} (Movie)`,
+              franchise: `${item.title || 'Unknown'} Franchise`,
+              coverImage: item.photo_url?.[0] || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
+              synopsis: `Year: ${item.year || 'N/A'}. AKA: ${item.title || 'N/A'}.`,
+              totalProgress: isTV ? 12 : 1,
+              progressType: 'episode' as const
+            };
+          });
         } catch (err) {
-          console.error("IMDb search error in ALL:", err);
+          console.error("Justwatch search error in ALL:", err);
         }
 
         dynamicResults = [...mappedShows, ...mappedMovies];
@@ -1014,7 +1375,7 @@ app.get('/api/manga/airing', async (req: Request, res: Response) => {
     let nextAiringEpisode = null;
     const baseDate = publishDate || new Date(); // Fallback to current time if no publish date found
     const lastPublishTime = baseDate.getTime();
-    
+
     // Estimate next weekly chapter (7 days later)
     const nextAiringTimeMs = lastPublishTime + 7 * 24 * 60 * 60 * 1000;
     const airingAt = Math.floor(nextAiringTimeMs / 1000);
