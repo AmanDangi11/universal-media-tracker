@@ -498,7 +498,7 @@ async function fetchAniListMediaBatch(ids: number[]) {
       throw new Error(`AniList returned status ${response.status}`);
     }
 
-    const json = await response.json();
+    const json = (await response.json()) as any;
     return json.data?.Page?.media || [];
   } catch (err) {
     console.error(`Failed to fetch batch from AniList:`, err);
