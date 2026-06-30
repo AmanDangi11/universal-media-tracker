@@ -379,6 +379,8 @@ export default function Home() {
   const [isImportExportOpen, setIsImportExportOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number; percentage: number } | null>(null);
+  const [isMinimizedImport, setIsMinimizedImport] = useState(false);
 
   // Set isMounted to true on client mount to bypass Next.js hydration issues
   useEffect(() => {
@@ -823,6 +825,8 @@ export default function Home() {
     if (!file) return;
     setIsImporting(true);
     setImportMessage(null);
+    setImportProgress({ current: 0, total: 0, percentage: 0 });
+    setIsMinimizedImport(false);
     try {
       const text = await file.text();
       let parsed;
@@ -831,41 +835,81 @@ export default function Home() {
       } catch (parseErr) {
         setImportMessage({ type: "error", text: "Invalid JSON format. Please upload a valid JSON file." });
         setIsImporting(false);
+        setImportProgress(null);
         return;
       }
 
-      let payload: any = {};
+      let isAnilist = false;
+      let itemsToImport: any[] = [];
+
       if (Array.isArray(parsed)) {
-        payload = { items: parsed };
+        itemsToImport = parsed;
       } else if (parsed && typeof parsed === "object" && Array.isArray(parsed.lists)) {
-        payload = { anilistData: parsed };
+        itemsToImport = parsed.lists;
+        isAnilist = true;
       } else {
         setImportMessage({ type: "error", text: "Watchlist data must be a JSON array or a valid AniList export." });
         setIsImporting(false);
+        setImportProgress(null);
         return;
       }
 
-      const res = await fetch(`${getApiBaseUrl()}/api/watchlist/import`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setImportMessage({ type: "error", text: data.error || "Failed to import watchlist." });
+      const totalItems = itemsToImport.length;
+      if (totalItems === 0) {
+        setImportMessage({ type: "success", text: "No items found to import." });
+        setIsImporting(false);
+        setImportProgress(null);
         return;
       }
 
-      setImportMessage({ type: "success", text: `Watchlist imported successfully! Loaded ${data.count} items.` });
+      setImportProgress({ current: 0, total: totalItems, percentage: 0 });
+
+      const chunkSize = 25;
+      let processedCount = 0;
+      let successfulCount = 0;
+
+      for (let i = 0; i < totalItems; i += chunkSize) {
+        const chunk = itemsToImport.slice(i, i + chunkSize);
+        let payload: any = {};
+        if (isAnilist) {
+          payload = { anilistData: { lists: chunk } };
+        } else {
+          payload = { items: chunk };
+        }
+
+        try {
+          const res = await fetch(`${getApiBaseUrl()}/api/watchlist/import`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            successfulCount += data.count || chunk.length;
+          }
+        } catch (err) {
+          console.error("Error importing chunk:", err);
+        }
+
+        processedCount += chunk.length;
+        const percentage = Math.min(100, Math.round((processedCount / totalItems) * 100));
+        setImportProgress({ current: processedCount, total: totalItems, percentage });
+      }
+
+      setImportMessage({ type: "success", text: `Watchlist imported successfully! Loaded ${successfulCount} out of ${totalItems} items.` });
       fetchWatchlist();
     } catch (err) {
       setImportMessage({ type: "error", text: "An error occurred during import. Please try again." });
     } finally {
       setIsImporting(false);
+      // Automatically dismiss the progress bar after 5 seconds
+      setTimeout(() => {
+        setImportProgress(null);
+      }, 5000);
     }
   };
 
@@ -2157,9 +2201,28 @@ export default function Home() {
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Database className="w-8 h-8 text-slate-600 group-hover:text-[#ff2e43] transition-colors" />
                     {isImporting ? (
-                      <div className="flex items-center gap-2 text-xs text-slate-400">
-                        <div className="w-3.5 h-3.5 border-2 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
-                        <span>Processing backup file...</span>
+                      <div className="flex flex-col items-center gap-2 w-full">
+                        <div className="flex items-center gap-2 text-xs text-slate-400">
+                          <div className="w-3.5 h-3.5 border-2 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
+                          <span>Importing: {importProgress?.current} / {importProgress?.total} ({importProgress?.percentage}%)</span>
+                        </div>
+                        <div className="w-full bg-[#15171e] h-2 rounded-full overflow-hidden mt-1">
+                          <div
+                            className="bg-[#ff2e43] h-full rounded-full transition-all duration-200"
+                            style={{ width: `${importProgress?.percentage}%` }}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsMinimizedImport(true);
+                            setIsImportExportOpen(false);
+                          }}
+                          className="mt-2 text-[10px] text-slate-400 hover:text-slate-200 bg-[#1f212a] hover:bg-[#2b2e3b] px-3 py-1.5 rounded-lg border border-[#1f212a] transition-all font-bold"
+                        >
+                          Run in Background
+                        </button>
                       </div>
                     ) : (
                       <>
@@ -2186,6 +2249,43 @@ export default function Home() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Floating Import Progress (Minimized or Modal Closed) */}
+      {importProgress && (isMinimizedImport || !isImportExportOpen) && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#0f1015]/90 border border-[#1f212a] backdrop-blur-md rounded-2xl p-4 w-72 shadow-2xl animate-in slide-in-from-bottom duration-300">
+          <div className="flex justify-between items-start mb-2">
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-[#ff2e43] animate-pulse" />
+              <span className="text-xs font-bold text-slate-105">
+                {importProgress.current < importProgress.total ? "Importing Watchlist..." : "Import Completed!"}
+              </span>
+            </div>
+            {importProgress.current < importProgress.total && (
+              <button
+                onClick={() => {
+                  setIsImportExportOpen(true);
+                  setIsMinimizedImport(false);
+                }}
+                className="text-[9px] font-extrabold text-[#ff2e43] hover:underline"
+              >
+                Expand
+              </button>
+            )}
+          </div>
+          <div className="space-y-1">
+            <div className="flex justify-between text-[10px] font-medium text-slate-400">
+              <span>{importProgress.current} / {importProgress.total} items</span>
+              <span>{importProgress.percentage}%</span>
+            </div>
+            <div className="w-full bg-[#050608] h-1.5 rounded-full overflow-hidden">
+              <div
+                className="bg-[#ff2e43] h-full rounded-full transition-all duration-350"
+                style={{ width: `${importProgress.percentage}%` }}
+              />
+            </div>
           </div>
         </div>
       )}
