@@ -2918,8 +2918,48 @@ export default function Home() {
         {/* ========================================================================= */}
         <section className={`lg:col-span-3 flex flex-col gap-6 order-1 lg:order-2 ${mobileActiveTab === "LIST" ? "flex" : "hidden"}`}>
 
-          {/* Dynamic Ledger Categories Controls */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between bg-[#0f1015] border border-[#1f212a] p-2 rounded-2xl gap-3 shadow-sm">
+          {/* Mobile Ledger Categories Controls (Dropdowns to fit cleanly on single row) */}
+          <div className="flex md:hidden items-center justify-between bg-[#0f1015] border border-[#1f212a] p-2.5 rounded-2xl gap-2 w-full shadow-sm">
+            <div className="flex items-center gap-2 flex-1">
+              {/* Media Type Dropdown */}
+              <div className="relative flex-1">
+                <select
+                  value={activeTab}
+                  onChange={(e) => setActiveTab(e.target.value as any)}
+                  className="w-full bg-[#050608] border border-[#1f212a] text-[#f3f4f6] text-[10px] font-black uppercase tracking-wider rounded-xl pl-3.5 pr-8 py-2.5 appearance-none focus:outline-none focus:border-[#ff2e43]/50 transition-all cursor-pointer"
+                >
+                  <option value="ALL">All Media</option>
+                  <option value="ANIME">Anime</option>
+                  <option value="MANGA">Manga</option>
+                  <option value="TV_SHOW">TV Series</option>
+                  <option value="MOVIE">Movies</option>
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 text-[8px] font-bold">▼</div>
+              </div>
+
+              {/* Status Dropdown */}
+              <div className="relative flex-1">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  className="w-full bg-[#050608] border border-[#1f212a] text-[#f3f4f6] text-[10px] font-black uppercase tracking-wider rounded-xl pl-3.5 pr-8 py-2.5 appearance-none focus:outline-none focus:border-[#ff2e43]/50 transition-all cursor-pointer"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="ONGOING">Ongoing</option>
+                  <option value="COMPLETED">Completed</option>
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 text-[8px] font-bold">▼</div>
+              </div>
+            </div>
+
+            {/* Quick Stats Indicator */}
+            <span className="text-[10px] text-[#ff2e43] font-black bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3 py-2.5 rounded-xl uppercase tracking-widest whitespace-nowrap">
+              {filteredMedia.length}
+            </span>
+          </div>
+
+          {/* Desktop Ledger Categories Controls (Original premium pills selector) */}
+          <div className="hidden md:flex flex-row md:items-center justify-between bg-[#0f1015] border border-[#1f212a] p-2 rounded-2xl gap-3 shadow-sm">
             
             {/* Left side: Media Type selection */}
             <div className="flex gap-1 overflow-x-auto no-scrollbar scroll-smooth w-full md:w-auto">
