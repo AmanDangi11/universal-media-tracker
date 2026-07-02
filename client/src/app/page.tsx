@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Film,
   BookOpen,
@@ -32,8 +32,11 @@ import {
   Trash2,
   Puzzle,
   Palette,
-  Key
+  Key,
+  Star,
+  Calendar
 } from "lucide-react";
+import { trackEvent } from "../lib/analytics";
 
 // Types
 interface MediaItem {
@@ -324,7 +327,15 @@ export default function Home() {
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [isLoadingWatchlist, setIsLoadingWatchlist] = useState(true);
   const [activeTab, setActiveTab] = useState<"ALL" | "ANIME" | "MANGA" | "TV_SHOW" | "MOVIE">("ALL");
-  const [mobileActiveTab, setMobileActiveTab] = useState<"LIST" | "CALENDAR" | "DISCOVER" | "STATS">("LIST");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ONGOING" | "COMPLETED">("ALL");
+  const [mobileActiveTab, setMobileActiveTab] = useState<"LIST" | "CALENDAR" | "DISCOVER" | "RELEASES" | "STATS">("LIST");
+
+  // Releases states
+  const [releases, setReleases] = useState<{ movies: any[]; series: any[]; anime: any[] } | null>(null);
+  const [releasesTimeframe, setReleasesTimeframe] = useState<"weekly" | "monthly">("weekly");
+  const [isLoadingReleases, setIsLoadingReleases] = useState(false);
+  const [selectedReleaseCategory, setSelectedReleaseCategory] = useState<"ALL" | "ANIME" | "TV_SHOW" | "MOVIE">("ALL");
+  const [releaseSearchQuery, setReleaseSearchQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState("");
@@ -448,8 +459,11 @@ export default function Home() {
             })
           });
           if (res.ok) {
-            const json = await res.json();
-            description = json?.data?.Media?.description || "";
+            const contentType = res.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+              const json = await res.json();
+              description = json?.data?.Media?.description || "";
+            }
           }
         } else if (detailsItem.type === "TV_SHOW") {
           const res = await fetch(`https://api.tvmaze.com/singlequery/shows?q=${encodeURIComponent(detailsItem.title)}`);
@@ -484,7 +498,7 @@ export default function Home() {
           return m;
         }));
       } catch (err) {
-        console.error("Failed to dynamically fetch media description:", err);
+        console.warn("Failed to dynamically fetch media description (transient error):", err);
       } finally {
         setLoadingDescription(false);
       }
@@ -556,13 +570,22 @@ export default function Home() {
                           variables: { search: item.title }
                         })
                       });
-                      const json = await res.json();
-                      const nextAiringEpisode = json?.data?.Media?.nextAiringEpisode;
-                      if (nextAiringEpisode) {
-                        return { ...item, nextAiringEpisode };
+                      if (res.ok) {
+                        try {
+                          const contentType = res.headers.get("content-type");
+                          if (contentType && contentType.includes("application/json")) {
+                            const json = await res.json();
+                            const nextAiringEpisode = json?.data?.Media?.nextAiringEpisode;
+                            if (nextAiringEpisode) {
+                              return { ...item, nextAiringEpisode };
+                            }
+                          }
+                        } catch (jsonErr) {
+                          console.warn("JSON parse warning (rate limit/error HTML returned from AniList) for:", item.title);
+                        }
                       }
                     } catch (err) {
-                      console.error("Failed to fetch live airing info for anime:", item.title, err);
+                      console.warn("Failed to fetch live airing info for anime (transient error):", item.title);
                     }
                   } else if (item.type === "MANGA" || item.type === "LIGHT_NOVEL") {
                     try {
@@ -577,7 +600,7 @@ export default function Home() {
                         };
                       }
                     } catch (err) {
-                      console.error("Failed to fetch live airing info for manga:", item.title, err);
+                      console.warn("Failed to fetch live airing info for manga (transient error):", item.title);
                     }
                   }
                 }
@@ -608,6 +631,54 @@ export default function Home() {
     };
   }, [token]);
 
+  const fetchReleases = async () => {
+    setIsLoadingReleases(true);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/releases?timeframe=${releasesTimeframe}`);
+      if (res.ok) {
+        const data = await res.json();
+        setReleases(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch releases:", err);
+    } finally {
+      setIsLoadingReleases(false);
+    }
+  };
+
+  useEffect(() => {
+    if (mobileActiveTab === "RELEASES") {
+      fetchReleases();
+    }
+  }, [mobileActiveTab, releasesTimeframe]);
+
+  const filteredReleases = useMemo(() => {
+    const listToFilter: any[] = [];
+    if (!releases) return [];
+    
+    if (selectedReleaseCategory === "ALL" || selectedReleaseCategory === "ANIME") {
+      listToFilter.push(...(releases.anime || []));
+    }
+    if (selectedReleaseCategory === "ALL" || selectedReleaseCategory === "TV_SHOW") {
+      listToFilter.push(...(releases.series || []));
+    }
+    if (selectedReleaseCategory === "ALL" || selectedReleaseCategory === "MOVIE") {
+      listToFilter.push(...(releases.movies || []));
+    }
+    
+    return [...listToFilter].sort((a, b) => new Date(a.releaseDate).getTime() - new Date(b.releaseDate).getTime());
+  }, [releases, selectedReleaseCategory]);
+
+  const displayedReleases = useMemo(() => {
+    if (!releaseSearchQuery.trim()) return filteredReleases;
+    const query = releaseSearchQuery.toLowerCase().trim();
+    return filteredReleases.filter(item => 
+      (item.title && item.title.toLowerCase().includes(query)) ||
+      (item.synopsis && item.synopsis.toLowerCase().includes(query)) ||
+      (item.franchise && item.franchise.toLowerCase().includes(query))
+    );
+  }, [filteredReleases, releaseSearchQuery]);
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usernameInput || !emailInput || !passwordInput) {
@@ -631,6 +702,7 @@ export default function Home() {
       localStorage.setItem("umt_user", JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
+      trackEvent("sign_up", "authentication", data.user.username);
       setUsernameInput("");
       setEmailInput("");
       setPasswordInput("");
@@ -664,6 +736,7 @@ export default function Home() {
       localStorage.setItem("umt_user", JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
+      trackEvent("login", "authentication", data.user.username);
       setEmailInput("");
       setPasswordInput("");
     } catch (err) {
@@ -814,6 +887,7 @@ export default function Home() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      trackEvent("export_watchlist", "data_transfer", user?.username);
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error(err);
@@ -866,7 +940,9 @@ export default function Home() {
 
       const chunkSize = 25;
       let processedCount = 0;
-      let successfulCount = 0;
+      let totalImported = 0;
+      let totalUpdated = 0;
+      let totalSkipped = 0;
 
       for (let i = 0; i < totalItems; i += chunkSize) {
         const chunk = itemsToImport.slice(i, i + chunkSize);
@@ -889,7 +965,9 @@ export default function Home() {
 
           if (res.ok) {
             const data = await res.json();
-            successfulCount += data.count || chunk.length;
+            totalImported += data.imported ?? (data.count || chunk.length);
+            totalUpdated += data.updated ?? 0;
+            totalSkipped += data.skipped ?? 0;
           }
         } catch (err) {
           console.error("Error importing chunk:", err);
@@ -900,7 +978,11 @@ export default function Home() {
         setImportProgress({ current: processedCount, total: totalItems, percentage });
       }
 
-      setImportMessage({ type: "success", text: `Watchlist imported successfully! Loaded ${successfulCount} out of ${totalItems} items.` });
+      trackEvent("import_watchlist", "data_transfer", `Imported ${totalImported} items`, totalImported);
+      setImportMessage({
+        type: "success",
+        text: `Watchlist imported successfully! Added ${totalImported} new, updated ${totalUpdated}, and skipped ${totalSkipped} duplicates.`
+      });
       fetchWatchlist();
     } catch (err) {
       setImportMessage({ type: "error", text: "An error occurred during import. Please try again." });
@@ -1055,20 +1137,25 @@ export default function Home() {
             }),
           });
 
-          const resData = await response.json();
-          const aniListResults = resData?.data?.Page?.media || [];
-
-          const mappedAniList = aniListResults.map((item: any) => ({
-            id: `anilist-${item.id}`,
-            type: item.type === "ANIME" ? "ANIME" : "MANGA",
-            title: item.title.english || item.title.romaji || "Unknown Title",
-            franchise: `${item.title.romaji || item.title.english} Franchise`,
-            coverImage: item.coverImage.large || "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=500&auto=format&fit=crop&q=60",
-            synopsis: item.description ? item.description.replace(/<[^>]*>/g, "") : "No synopsis available.",
-            totalProgress: item.type === "ANIME" ? (item.episodes || 12) : (item.chapters || 150),
-            progressType: item.type === "ANIME" ? "episode" : "chapter",
-            nextAiringEpisode: item.nextAiringEpisode,
-          }));
+          let mappedAniList: any[] = [];
+          if (response.ok) {
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+              const resData = await response.json();
+              const aniListResults = resData?.data?.Page?.media || [];
+              mappedAniList = aniListResults.map((item: any) => ({
+                id: `anilist-${item.id}`,
+                type: item.type === "ANIME" ? "ANIME" : "MANGA",
+                title: item.title.english || item.title.romaji || "Unknown Title",
+                franchise: `${item.title.romaji || item.title.english} Franchise`,
+                coverImage: item.coverImage.large || "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=500&auto=format&fit=crop&q=60",
+                synopsis: item.description ? item.description.replace(/<[^>]*>/g, "") : "No synopsis available.",
+                totalProgress: item.type === "ANIME" ? (item.episodes || 12) : (item.chapters || 150),
+                progressType: item.type === "ANIME" ? "episode" : "chapter",
+                nextAiringEpisode: item.nextAiringEpisode,
+              }));
+            }
+          }
 
           finalResults = [...finalResults, ...mappedAniList];
         }
@@ -1098,18 +1185,11 @@ export default function Home() {
           });
         }
 
-        // Strict name or title check (ignore description search matches returned by fuzzy search APIs)
-        if (modalSearchQuery) {
-          const queryLower = modalSearchQuery.toLowerCase().trim();
-          finalResults = finalResults.filter(item => 
-            item.title.toLowerCase().includes(queryLower) ||
-            item.franchise.toLowerCase().includes(queryLower)
-          );
-        }
+
 
         setSearchResults(finalResults);
       } catch (error) {
-        console.error("Error searching online sources:", error);
+        console.warn("Error searching online sources (transient error):", error);
       } finally {
         setIsLoadingSearch(false);
       }
@@ -1142,6 +1222,7 @@ export default function Home() {
               }).catch((err) => console.error("Failed to sync progress increment:", err));
             }
 
+            trackEvent("increment_progress", "media", item.title, nextProgress);
             setNotificationMsg(`Updated ${item.title} to ${item.progressType} ${nextProgress}!`);
             setShowNotification(true);
             setTimeout(() => setShowNotification(false), 3000);
@@ -1179,6 +1260,7 @@ export default function Home() {
             }).catch((err) => console.error("Failed to sync progress catchup:", err));
           }
 
+          trackEvent("catchup_progress", "media", item.title, item.totalProgress);
           setNotificationMsg(`Caught up "${item.title}" completely to ${item.progressType} ${item.totalProgress}!`);
           setShowNotification(true);
           setTimeout(() => setShowNotification(false), 3000);
@@ -1222,6 +1304,7 @@ export default function Home() {
             }).catch((err) => console.error("Failed to sync custom progress:", err));
           }
 
+          trackEvent("custom_progress", "media", item.title, val);
           setNotificationMsg(`Set "${item.title}" to ${progressType} ${val}!`);
           setShowNotification(true);
           setTimeout(() => setShowNotification(false), 3000);
@@ -1260,6 +1343,7 @@ export default function Home() {
             }).catch((err) => console.error("Failed to sync progress reset:", err));
           }
 
+          trackEvent("reset_progress", "media", item.title, 0);
           return { ...item, currentProgress: 0, lastUpdated: "Just now" };
         }
         return item;
@@ -1353,6 +1437,7 @@ export default function Home() {
         .then((data) => {
           // Replace tempId with actual DB progressId and resolved totalProgress
           if (data.progressId) {
+            trackEvent("add_to_watchlist", "media", result.title, result.totalProgress);
             setMediaList((prev) =>
               prev.map((item) =>
                 item.id === tempId
@@ -1521,11 +1606,20 @@ export default function Home() {
 
     if (!matchesSearch) return false;
 
-    if (activeTab === "ALL") return true;
-    if (activeTab === "ANIME") return item.type === "ANIME";
-    if (activeTab === "MANGA") return item.type === "MANGA" || item.type === "LIGHT_NOVEL";
-    if (activeTab === "TV_SHOW") return item.type === "TV_SHOW";
-    if (activeTab === "MOVIE") return item.type === "MOVIE";
+    // 1. Filter by category (activeTab)
+    let matchesType = true;
+    if (activeTab === "ANIME") matchesType = item.type === "ANIME";
+    else if (activeTab === "MANGA") matchesType = item.type === "MANGA" || item.type === "LIGHT_NOVEL";
+    else if (activeTab === "TV_SHOW") matchesType = item.type === "TV_SHOW";
+    else if (activeTab === "MOVIE") matchesType = item.type === "MOVIE";
+
+    if (!matchesType) return false;
+
+    // 2. Filter by progress status (statusFilter)
+    const isCompleted = item.currentProgress === item.totalProgress;
+    if (statusFilter === "ONGOING") return !isCompleted;
+    if (statusFilter === "COMPLETED") return isCompleted;
+
     return true;
   });
 
@@ -2636,6 +2730,8 @@ export default function Home() {
           </div>
         </div>
 
+
+
         {/* Global Search & Actions */}
         <div className="flex items-center gap-3 w-full md:w-auto">
 
@@ -2711,6 +2807,38 @@ export default function Home() {
 
         </div>
       </header>
+
+      {/* SUB-HEADER TABS NAVIGATION (Desktop only) */}
+      {user && (
+        <div className="sticky top-[73px] z-30 hidden md:flex items-center justify-center bg-[#050608]/90 backdrop-blur-md border-b border-[#1f212a] py-3.5 shadow-md">
+          <div className="flex items-center bg-[#0f1015] border border-[#1f212a] p-1.5 rounded-2xl gap-1">
+            {[
+              { id: "LIST", label: "My Ledger", icon: BookOpen },
+              { id: "CALENDAR", label: "Airing Calendar", icon: Tv },
+              { id: "DISCOVER", label: "Discover Catalog", icon: Search },
+              { id: "RELEASES", label: "New Releases", icon: Sparkles },
+              { id: "STATS", label: "Analytics Stats", icon: Layers }
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = mobileActiveTab === tab.id;
+              return (
+                <button
+                  key={`desktop-nav-${tab.id}`}
+                  onClick={() => setMobileActiveTab(tab.id as any)}
+                  className={`flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 ${
+                    isActive
+                      ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 scale-[1.03]"
+                      : "text-slate-400 hover:text-slate-100 hover:bg-[#1f212a]/50"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-8 py-6 sm:py-10 grid grid-cols-1 lg:grid-cols-4 gap-8">
 
@@ -2788,14 +2916,15 @@ export default function Home() {
         {/* ========================================================================= */}
         {/* 2. PROGRESS LIST LEDGER GRID (Order-1: Positioned first on mobile)        */}
         {/* ========================================================================= */}
-        <section className={`lg:col-span-3 flex flex-col gap-6 order-1 lg:order-2 ${mobileActiveTab === "LIST" ? "flex" : "hidden md:flex"
-          }`}>
+        <section className={`lg:col-span-3 flex flex-col gap-6 order-1 lg:order-2 ${mobileActiveTab === "LIST" ? "flex" : "hidden"}`}>
 
           {/* Dynamic Ledger Categories Controls */}
-          <div className="flex items-center justify-between bg-[#0f1015] border border-[#1f212a] p-1 sm:p-1.5 rounded-2xl gap-2 shadow-sm">
-            <div className="flex gap-1 overflow-x-auto no-scrollbar scroll-smooth w-full sm:w-auto">
+          <div className="flex flex-col md:flex-row md:items-center justify-between bg-[#0f1015] border border-[#1f212a] p-2 rounded-2xl gap-3 shadow-sm">
+            
+            {/* Left side: Media Type selection */}
+            <div className="flex gap-1 overflow-x-auto no-scrollbar scroll-smooth w-full md:w-auto">
               {[
-                { label: "All", value: "ALL" },
+                { label: "All Media", value: "ALL" },
                 { label: "Anime", value: "ANIME" },
                 { label: "Manga", value: "MANGA" },
                 { label: "Series", value: "TV_SHOW" },
@@ -2804,20 +2933,46 @@ export default function Home() {
                 <button
                   key={tab.value}
                   onClick={() => setActiveTab(tab.value as any)}
-                  className={`flex-1 sm:flex-none text-center px-4 py-2.5 rounded-xl text-[10px] sm:text-[11px] font-bold uppercase tracking-wider transition-all min-w-[75px] sm:min-w-0 whitespace-nowrap ${activeTab === tab.value
+                  className={`flex-1 md:flex-none text-center px-3.5 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all whitespace-nowrap ${
+                    activeTab === tab.value
                       ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20"
                       : "text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/50"
-                    }`}
+                  }`}
                 >
                   {tab.label}
                 </button>
               ))}
             </div>
 
-            {/* Quick Stats Indicator */}
-            <span className="hidden sm:inline text-[10px] text-[#ff2e43] font-bold bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3.5 py-2 rounded-full uppercase tracking-wider">
-              {filteredMedia.length} Active Ledger Entries
-            </span>
+            {/* Right side: Progress Status + Quick Stats Counter */}
+            <div className="flex flex-wrap sm:flex-nowrap items-center justify-between md:justify-end gap-3 w-full md:w-auto">
+              {/* Progress Status Filter Tabs */}
+              <div className="flex gap-1 bg-[#050608] p-1 rounded-xl border border-[#1f212a]/60">
+                {[
+                  { label: "All Statuses", value: "ALL" },
+                  { label: "Ongoing", value: "ONGOING" },
+                  { label: "Completed", value: "COMPLETED" }
+                ].map((tab) => (
+                  <button
+                    key={tab.value}
+                    onClick={() => setStatusFilter(tab.value as any)}
+                    className={`px-3 py-1.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wider transition-all whitespace-nowrap ${
+                      statusFilter === tab.value
+                        ? "bg-[#ff2e43] text-white shadow-md shadow-[#ff2e43]/15"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Quick Stats Indicator */}
+              <span className="text-[9px] text-[#ff2e43] font-bold bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3 py-1.5 rounded-xl uppercase tracking-widest whitespace-nowrap">
+                {filteredMedia.length} Match{filteredMedia.length !== 1 ? "es" : ""}
+              </span>
+            </div>
+
           </div>
 
           {/* DYNAMIC LIST LEDGER CONTAINER (Trakt vertical cards poster grid) */}
@@ -3077,7 +3232,7 @@ export default function Home() {
         {/* ========================================================================= */}
 
         {/* Airing Calendar Timeline Screen */}
-        <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "CALENDAR" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
+        <div className={`col-span-full flex flex-col gap-5 w-full max-w-4xl mx-auto pb-20 ${mobileActiveTab === "CALENDAR" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
           <div className="flex items-center justify-between border-b border-[#1f212a] pb-3">
             <div>
               <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
@@ -3123,7 +3278,7 @@ export default function Home() {
         </div>
 
         {/* Discover API Add Screen (Instant search on mobile) */}
-        <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "DISCOVER" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
+        <div className={`col-span-full flex flex-col gap-5 w-full max-w-4xl mx-auto pb-20 ${mobileActiveTab === "DISCOVER" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
           <div className="border-b border-[#1f212a] pb-3">
             <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
               <Search className="w-4 h-4 text-[#ff2e43]" />
@@ -3216,8 +3371,200 @@ export default function Home() {
           </div>
         </div>
 
+        {/* New Releases Screen */}
+        <div className={`col-span-full flex flex-col gap-5 w-full max-w-5xl mx-auto pb-20 ${mobileActiveTab === "RELEASES" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#1f212a] pb-4">
+            <div>
+              <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
+                <Sparkles className="w-4 h-4 text-[#ff2e43] fill-[#ff2e43]" />
+                New Releases
+              </h2>
+              <p className="text-[9px] text-slate-550 mt-0.5 font-medium">Live feeds of upcoming and newly released titles</p>
+            </div>
+            
+            {/* Search Input & Timeframe selector wrapper */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+              {/* Search input for releases */}
+              <div className="relative w-full sm:w-60">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search new releases..."
+                  value={releaseSearchQuery}
+                  onChange={(e) => setReleaseSearchQuery(e.target.value)}
+                  className="w-full bg-[#0f1015] border border-[#1f212a] text-xs rounded-xl pl-9 pr-3.5 py-2 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
+                />
+                {releaseSearchQuery && (
+                  <button
+                    onClick={() => setReleaseSearchQuery("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 text-[10px] font-bold"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Timeframe selector (Weekly/Monthly) */}
+              {selectedReleaseCategory !== "MOVIE" ? (
+                <div className="flex bg-[#0f1015] border border-[#1f212a] p-1 rounded-xl gap-1 justify-center sm:justify-start">
+                  {[
+                    { label: "Weekly", value: "weekly" as const },
+                    { label: "Monthly", value: "monthly" as const }
+                  ].map((tf) => (
+                    <button
+                      key={tf.value}
+                      onClick={() => setReleasesTimeframe(tf.value)}
+                      className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
+                        releasesTimeframe === tf.value
+                          ? "bg-[#ff2e43] text-white shadow-md shadow-[#ff2e43]/15"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {tf.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3.5 py-1.5 rounded-xl text-center sm:text-left">
+                  <span className="text-[9px] text-[#ff2e43] font-bold uppercase tracking-widest">Monthly Releases Feed</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Release Category Filter Controls */}
+          <div className="flex gap-1 overflow-x-auto no-scrollbar scroll-smooth">
+            {[
+              { label: "All Releases", value: "ALL" as const },
+              { label: "Anime", value: "ANIME" as const },
+              { label: "Series", value: "TV_SHOW" as const },
+              { label: "Movies", value: "MOVIE" as const }
+            ].map((cat) => (
+              <button
+                key={cat.value}
+                onClick={() => {
+                  setSelectedReleaseCategory(cat.value);
+                  if (cat.value === "MOVIE") {
+                    setReleasesTimeframe("monthly");
+                  }
+                }}
+                className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap ${
+                  selectedReleaseCategory === cat.value
+                    ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20"
+                    : "bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:bg-[#1f212a]/50 hover:text-slate-200"
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {isLoadingReleases ? (
+            <div className="text-center py-20 text-[#ff2e43] flex flex-col items-center justify-center gap-2.5">
+              <div className="w-8 h-8 border-4 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
+              <p className="text-[10px] font-bold text-slate-450">Scanning live release feeds...</p>
+            </div>
+          ) : displayedReleases.length === 0 ? (
+            <div className="text-center py-16 text-slate-500 flex flex-col items-center gap-2 bg-[#0f1015]/40 border border-dashed border-[#1f212a] rounded-3xl w-full">
+              {releaseSearchQuery.trim() ? (
+                <Search className="w-8 h-8 text-slate-700 animate-pulse" />
+              ) : (
+                <Sparkles className="w-8 h-8 text-slate-700 animate-pulse" />
+              )}
+              <p className="text-xs font-semibold text-slate-400">
+                {releaseSearchQuery.trim() ? "No matching releases found" : "No releases found"}
+              </p>
+              <p className="text-[9px] text-slate-600 leading-normal max-w-xs px-8">
+                {releaseSearchQuery.trim()
+                  ? "Try refining your search term or selecting a different category."
+                  : "No newly scheduled titles returned in this range. Try shifting the timeframe to Monthly."}
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-[650px] overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-200">
+                {displayedReleases.map((item: any) => {
+                  const alreadyAdded = mediaList.some(
+                    (m) => m.title.toLowerCase() === item.title.toLowerCase()
+                  );
+
+                  return (
+                    <div
+                      key={`release-${item.id}`}
+                      className="group bg-[#0f1015]/80 backdrop-blur-sm border border-[#1f212a] rounded-2xl p-3 sm:p-4 flex gap-4 hover:border-[#ff2e43]/30 hover:bg-[#121319] transition-all duration-300 shadow-lg relative"
+                    >
+                      {/* Poster Image */}
+                      <div className="relative aspect-[2/3] w-20 sm:w-24 bg-slate-900 rounded-xl overflow-hidden flex-shrink-0 border border-[#1f212a]/50">
+                        <img
+                          src={item.coverImage}
+                          alt={item.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                        <div className="absolute top-1.5 left-1.5 flex flex-col gap-1">
+                          <span className="text-[7px] font-extrabold uppercase tracking-widest px-1.5 py-0.5 bg-[#ff2e43] text-white rounded-md shadow-md">
+                            {item.type}
+                          </span>
+                          {item.episode && (
+                            <span className="text-[7px] font-extrabold uppercase tracking-widest px-1.5 py-0.5 bg-indigo-600 text-white rounded-md shadow-md">
+                              Ep {item.episode}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Metadata & Actions */}
+                      <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                        <div>
+                          <div className="flex justify-between items-start gap-2">
+                            <h4 className="text-xs sm:text-sm font-black text-slate-200 line-clamp-1 group-hover:text-[#ff2e43] transition-colors" title={item.title}>
+                              {item.title}
+                            </h4>
+                            {item.rating > 0 && (
+                              <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-500/90 text-[#0f1015] rounded-md shadow-md text-[8px] font-black flex-shrink-0">
+                                <Star className="w-2.5 h-2.5 fill-[#0f1015]" />
+                                {item.rating.toFixed(1)}
+                              </div>
+                            )}
+                          </div>
+
+                          <p className="text-[8px] text-[#ff2e43]/85 font-extrabold uppercase tracking-widest mt-1 flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-[#ff2e43]" />
+                            {item.releaseDate ? `${new Date(item.releaseDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Date TBD'}
+                          </p>
+
+                          <p className="text-[10px] sm:text-xs text-slate-400 line-clamp-2 sm:line-clamp-3 mt-2 leading-relaxed font-medium">
+                            {item.synopsis}
+                          </p>
+                        </div>
+
+                        <div className="pt-3 border-t border-[#1f212a]/50 mt-3 flex justify-end">
+                          {alreadyAdded ? (
+                            <div className="px-4 py-1.5 bg-emerald-955/20 border border-emerald-500/30 text-emerald-450 rounded-xl text-[9px] font-bold flex items-center gap-1 cursor-default">
+                              <Check className="w-3.5 h-3.5" />
+                              Tracked
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleAddMedia(item)}
+                              className="px-4 py-1.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-[9px] font-bold transition-all flex items-center gap-1 active:scale-95 shadow-md shadow-[#ff2e43]/15"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Track Media
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+        </div>
+
         {/* Mobile Settings, Analytics & Sync state */}
-        <div className={`md:hidden flex flex-col gap-5 w-full pb-20 ${mobileActiveTab === "STATS" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
+        <div className={`col-span-full flex flex-col gap-5 w-full max-w-5xl mx-auto pb-20 ${mobileActiveTab === "STATS" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
           <div className="border-b border-[#1f212a] pb-3">
             <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
               <Activity className="w-4 h-4 text-[#ff2e43]" />
@@ -3313,7 +3660,7 @@ export default function Home() {
         {/* ========================================================================= */}
         {/* 3. SIDE PANEL DESKTOP METRICS (Order-2: Sidebar)                         */}
         {/* ========================================================================= */}
-        <aside className="hidden lg:flex lg:col-span-1 flex-col gap-6 order-2 lg:order-1">
+        <aside className={`hidden lg:flex lg:col-span-1 flex-col gap-6 order-2 lg:order-1 ${mobileActiveTab === "LIST" ? "lg:flex" : "lg:hidden"}`}>
 
           {/* Watch & Read Analytics Card */}
           <div className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-5 shadow-sm">
@@ -3396,6 +3743,7 @@ export default function Home() {
           { id: "LIST", label: "My Ledger", icon: BookOpen },
           { id: "CALENDAR", label: "Airing", icon: Tv },
           { id: "DISCOVER", label: "Discover", icon: Search },
+          { id: "RELEASES", label: "Releases", icon: Sparkles },
           { id: "STATS", label: "Analytics", icon: Layers }
         ].map((tab) => {
           const Icon = tab.icon;

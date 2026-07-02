@@ -506,6 +506,15 @@ async function fetchAniListMediaBatch(ids: number[]) {
   }
 }
 
+// Helper to compare dates for import/export deduplication
+function isDateEqual(d1: Date | string | null | undefined, d2: Date | string | null | undefined): boolean {
+  if (!d1 && !d2) return true;
+  if (!d1 || !d2) return false;
+  const t1 = new Date(d1).getTime();
+  const t2 = new Date(d2).getTime();
+  return isNaN(t1) || isNaN(t2) ? false : t1 === t2;
+}
+
 // Import Watchlist from JSON (Supports UMT layout or AniList GDPR dump layouts)
 app.post('/api/watchlist/import', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -515,18 +524,34 @@ app.post('/api/watchlist/import', authenticateToken, async (req: AuthenticatedRe
       return res.status(400).json({ error: 'Invalid payload: items or anilistData is required' });
     }
 
-    let importCount = 0;
+    let importedCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
 
     if (items && Array.isArray(items)) {
-      // Standard Import Format
-      for (const item of items) {
-        if (!item.title || !item.type) {
-          continue;
+      // Standard Import Format: Deduplicate items in incoming array first to avoid internal duplicates
+      const uniqueItems = [];
+      const seenItems = new Set<string>();
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        if (!item.title || !item.type) continue;
+        const key = `${item.title.trim().toLowerCase()}-${item.type}`;
+        if (!seenItems.has(key)) {
+          seenItems.add(key);
+          uniqueItems.unshift(item);
         }
+      }
 
-        // Find or create global Media record
+      for (const item of uniqueItems) {
+        // Find or create global Media record using case-insensitive title and type matching
         let media = await prisma.media.findFirst({
-          where: { titleEnglish: item.title }
+          where: {
+            titleEnglish: {
+              equals: item.title.trim(),
+              mode: 'insensitive'
+            },
+            type: item.type
+          }
         });
 
         if (!media) {
@@ -536,8 +561,8 @@ app.post('/api/watchlist/import', authenticateToken, async (req: AuthenticatedRe
           media = await prisma.media.create({
             data: {
               type: item.type,
-              titleEnglish: item.title,
-              titleRomaji: `${item.title} Franchise`,
+              titleEnglish: item.title.trim(),
+              titleRomaji: `${item.title.trim()} Franchise`,
               coverImage: item.coverImage || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
               synopsis: item.synopsis || '',
               status: item.type === 'MOVIE' ? 'FINISHED' : 'RELEASING',
@@ -569,7 +594,22 @@ app.post('/api/watchlist/import', authenticateToken, async (req: AuthenticatedRe
           }
         });
 
+        const targetProgress = item.currentProgress || 0;
+        const targetStatus = item.status || 'PLANNING';
+        const targetRating = item.rating !== undefined ? item.rating : null;
+
         if (existingProgress) {
+          const isProgressEqual = existingProgress.currentProgress === targetProgress;
+          const isStatusEqual = existingProgress.status === targetStatus;
+          const isRatingEqual = existingProgress.rating === targetRating;
+          const isStartedAtEqual = isDateEqual(existingProgress.startedAt, item.startedAt);
+          const isCompletedAtEqual = isDateEqual(existingProgress.completedAt, item.completedAt);
+
+          if (isProgressEqual && isStatusEqual && isRatingEqual && isStartedAtEqual && isCompletedAtEqual) {
+            skippedCount++;
+            continue;
+          }
+
           await prisma.userMediaProgress.update({
             where: { id: existingProgress.id },
             data: {
@@ -580,6 +620,7 @@ app.post('/api/watchlist/import', authenticateToken, async (req: AuthenticatedRe
               completedAt: item.completedAt ? new Date(item.completedAt) : existingProgress.completedAt
             }
           });
+          updatedCount++;
         } else {
           await prisma.userMediaProgress.create({
             data: {
@@ -592,16 +633,27 @@ app.post('/api/watchlist/import', authenticateToken, async (req: AuthenticatedRe
               completedAt: item.completedAt ? new Date(item.completedAt) : null
             }
           });
+          importedCount++;
         }
-
-        importCount++;
       }
     } else if (anilistData && Array.isArray(anilistData.lists)) {
       // AniList Import Format
       const lists = anilistData.lists;
 
+      // Deduplicate lists by series_id first
+      const uniqueLists = [];
+      const seenSeriesIds = new Set<number>();
+      for (let i = lists.length - 1; i >= 0; i--) {
+        const item = lists[i];
+        if (!item.series_id) continue;
+        if (!seenSeriesIds.has(item.series_id)) {
+          seenSeriesIds.add(item.series_id);
+          uniqueLists.unshift(item);
+        }
+      }
+
       // 1. Filter out entries we already have in our database by anilistId to avoid unnecessary API requests
-      const anilistIds = lists.map((item: any) => item.series_id).filter(Boolean);
+      const anilistIds = uniqueLists.map((item: any) => item.series_id).filter(Boolean);
       const existingMediaList = await prisma.media.findMany({
         where: { anilistId: { in: anilistIds } }
       });
@@ -625,9 +677,7 @@ app.post('/api/watchlist/import', authenticateToken, async (req: AuthenticatedRe
       }
 
       // 4. Create missing Media entries and UserMediaProgress records
-      for (const item of lists) {
-        if (!item.series_id) continue;
-
+      for (const item of uniqueLists) {
         let media = existingMediaMap.get(item.series_id);
 
         if (!media) {
@@ -675,6 +725,15 @@ app.post('/api/watchlist/import', authenticateToken, async (req: AuthenticatedRe
         const resolvedRating = item.score && item.score > 0 ? Number(item.score) : null;
 
         if (existingProgress) {
+          const isProgressEqual = existingProgress.currentProgress === (item.progress !== undefined ? item.progress : existingProgress.currentProgress);
+          const isStatusEqual = existingProgress.status === mappedStatus;
+          const isRatingEqual = existingProgress.rating === (resolvedRating !== null ? resolvedRating : existingProgress.rating);
+
+          if (isProgressEqual && isStatusEqual && isRatingEqual) {
+            skippedCount++;
+            continue;
+          }
+
           await prisma.userMediaProgress.update({
             where: { id: existingProgress.id },
             data: {
@@ -683,6 +742,7 @@ app.post('/api/watchlist/import', authenticateToken, async (req: AuthenticatedRe
               rating: resolvedRating !== null ? resolvedRating : existingProgress.rating
             }
           });
+          updatedCount++;
         } else {
           await prisma.userMediaProgress.create({
             data: {
@@ -693,13 +753,18 @@ app.post('/api/watchlist/import', authenticateToken, async (req: AuthenticatedRe
               rating: resolvedRating
             }
           });
+          importedCount++;
         }
-
-        importCount++;
       }
     }
 
-    res.json({ success: true, count: importCount });
+    res.json({
+      success: true,
+      count: importedCount + updatedCount,
+      imported: importedCount,
+      updated: updatedCount,
+      skipped: skippedCount
+    });
   } catch (error) {
     console.error('Import watchlist failed:', error);
     res.status(500).json({ error: 'Failed to import watchlist' });
@@ -716,9 +781,59 @@ app.post('/api/watchlist/add', authenticateToken, async (req: AuthenticatedReque
     }
 
     // 1. Check if media already exists in global Media database or create it
-    let media = await prisma.media.findFirst({
-      where: { titleEnglish: title }
-    });
+    let media = null;
+    let parsedTmdbId: number | null = null;
+    let parsedAnilistId: number | null = null;
+
+    if (externalId) {
+      if (externalId.startsWith('tmdb-')) {
+        const tmdbIdStr = externalId.replace('tmdb-season-', '').replace('tmdb-movie-', '').replace('tmdb-', '');
+        const idVal = parseInt(tmdbIdStr, 10);
+        if (!isNaN(idVal)) {
+          parsedTmdbId = idVal;
+        }
+      } else if (externalId.startsWith('anilist-')) {
+        const idVal = parseInt(externalId.replace('anilist-', ''), 10);
+        if (!isNaN(idVal)) {
+          parsedAnilistId = idVal;
+        }
+      }
+    }
+
+    if (parsedTmdbId) {
+      media = await prisma.media.findUnique({
+        where: { tmdbId: parsedTmdbId }
+      });
+    } else if (parsedAnilistId) {
+      media = await prisma.media.findUnique({
+        where: { anilistId: parsedAnilistId }
+      });
+    }
+
+    if (!media) {
+      media = await prisma.media.findFirst({
+        where: { titleEnglish: title }
+      });
+    }
+
+    if (media) {
+      let needsUpdate = false;
+      const updateData: any = {};
+      if (parsedTmdbId && media.tmdbId !== parsedTmdbId) {
+        updateData.tmdbId = parsedTmdbId;
+        needsUpdate = true;
+      }
+      if (parsedAnilistId && media.anilistId !== parsedAnilistId) {
+        updateData.anilistId = parsedAnilistId;
+        needsUpdate = true;
+      }
+      if (needsUpdate) {
+        media = await prisma.media.update({
+          where: { id: media.id },
+          data: updateData
+        });
+      }
+    }
 
     if (!media) {
       let resolvedTotalEpisodes = type === 'ANIME' || type === 'TV_SHOW' || type === 'MOVIE' ? totalProgress : null;
@@ -727,13 +842,10 @@ app.post('/api/watchlist/add', authenticateToken, async (req: AuthenticatedReque
       // Dynamically fetch accurate total counts using externalId
       if (externalId) {
         try {
-          if (externalId.startsWith('tmdb-') && (type === 'TV_SHOW' || type === 'ANIME')) {
-            const tmdbId = parseInt(externalId.replace('tmdb-', ''), 10);
-            if (!isNaN(tmdbId)) {
-              const details = await MediaAggregator.getTMDBDetails(tmdbId, true);
-              if (details.totalEpisodes) {
-                resolvedTotalEpisodes = details.totalEpisodes;
-              }
+          if (parsedTmdbId && (type === 'TV_SHOW' || type === 'ANIME')) {
+            const details = await MediaAggregator.getTMDBDetails(parsedTmdbId, true);
+            if (details.totalEpisodes) {
+              resolvedTotalEpisodes = details.totalEpisodes;
             }
           } else if (externalId.startsWith('tvmaze-season-') && (type === 'TV_SHOW' || type === 'ANIME')) {
             const seasonId = parseInt(externalId.replace('tvmaze-season-', ''), 10);
@@ -799,7 +911,9 @@ app.post('/api/watchlist/add', authenticateToken, async (req: AuthenticatedReque
           synopsis: synopsis,
           status: type === 'MOVIE' ? 'FINISHED' : 'RELEASING',
           totalEpisodes: resolvedTotalEpisodes,
-          totalChapters: resolvedTotalChapters
+          totalChapters: resolvedTotalChapters,
+          tmdbId: parsedTmdbId,
+          anilistId: parsedAnilistId
         }
       });
     }
@@ -963,10 +1077,7 @@ app.get('/health', async (_req: Request, res: Response) => {
       error: error instanceof Error ? error.message : 'Unknown database error'
     });
   }
-});
-
-
-// Real-time Third-Party Catalog Search Gateway
+});// Real-time Third-Party Catalog Search Gateway
 app.get('/api/search', async (req: Request, res: Response) => {
   try {
     const q = req.query.q as string || '';
@@ -979,6 +1090,7 @@ app.get('/api/search', async (req: Request, res: Response) => {
     const isTv = type === 'TV_SHOW';
     const isMovie = type === 'MOVIE';
     const apiKey = process.env.TMDB_API_KEY || '';
+
 
     if ((isTv || isMovie) && apiKey && apiKey !== 'your_tmdb_api_key_here') {
       const mediaType = isTv ? 'tv' : 'movie';
@@ -1057,7 +1169,7 @@ app.get('/api/search', async (req: Request, res: Response) => {
       }
     }
 
-    // 2. Otherwise, use 100% free, dynamic keyless APIs (TVmaze for TV shows/seasons, IMDb for movies)
+    // 2. Otherwise, use 100% free, dynamic keyless APIs (TVmaze for TV shows/seasons, IMDb/JustWatch for movies)
     let dynamicResults: any[] = [];
 
     try {
@@ -1065,17 +1177,7 @@ app.get('/api/search', async (req: Request, res: Response) => {
         const tvmazeSearchUrl = `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(q)}`;
         const searchRes = await axios.get(tvmazeSearchUrl, { timeout: 5000 });
         const matches = searchRes.data || [];
-
-        const filteredMatches = matches.filter((matchItem: any) => {
-          const show = matchItem.show;
-          if (!show) return false;
-          if (show.language === 'Hindi' && show.network !== null) {
-            return false;
-          }
-          return true;
-        });
-
-        const topMatches = filteredMatches.slice(0, 4);
+        const topMatches = matches.slice(0, 4);
         const expanded: any[] = [];
         const foundImdbIds = new Set<string>();
 
@@ -1160,19 +1262,55 @@ app.get('/api/search', async (req: Request, res: Response) => {
 
         dynamicResults = expanded;
       } else if (type === 'MOVIE') {
-        const imdbUrl = `https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(q)}`;
-        const imdbResponse = await axios.get(imdbUrl, { timeout: 5000 });
-        const items = imdbResponse.data?.description || [];
-        dynamicResults = items.slice(0, 10).map((movie: any) => ({
-          id: `imdb-movie-${movie['#IMDB_ID']}`,
-          type: 'MOVIE' as const,
-          title: movie['#TITLE'] || 'Unknown Movie',
-          franchise: `${movie['#TITLE'] || 'Unknown'} Franchise`,
-          coverImage: movie['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
-          synopsis: `Year: ${movie['#YEAR'] || 'N/A'}. Starring: ${movie['#ACTORS'] || 'N/A'}. AKA: ${movie['#AKA'] || 'N/A'}.`,
-          totalProgress: 1,
-          progressType: 'episode' as const
-        }));
+        let movies: any[] = [];
+
+        // 1. Fetch from IMDb search proxy
+        try {
+          const imdbUrl = `https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(q)}`;
+          const imdbResponse = await axios.get(imdbUrl, { timeout: 4000 });
+          const items = imdbResponse.data?.description || [];
+          movies = items.slice(0, 8).map((movie: any) => ({
+            id: `imdb-movie-${movie['#IMDB_ID']}`,
+            type: 'MOVIE' as const,
+            title: movie['#TITLE'] || 'Unknown Movie',
+            franchise: `${movie['#TITLE'] || 'Unknown'} Franchise`,
+            coverImage: movie['#IMG_POSTER'] || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
+            synopsis: `Year: ${movie['#YEAR'] || 'N/A'}. Starring: ${movie['#ACTORS'] || 'N/A'}. AKA: ${movie['#AKA'] || 'N/A'}.`,
+            totalProgress: 1,
+            progressType: 'episode' as const
+          }));
+        } catch (imdbErr) {
+          console.error("IMDb search error in MOVIE:", imdbErr);
+        }
+
+        // 2. Fetch from JustWatch search proxy to find Indian movies
+        try {
+          const jwUrl = `https://imdb.iamidiotareyoutoo.com/justwatch?q=${encodeURIComponent(q)}`;
+          const jwResponse = await axios.get(jwUrl, { timeout: 4000 });
+          const jwItems = jwResponse.data?.description || [];
+          
+          jwItems.forEach((item: any) => {
+            if (item.type !== 'MOVIE') return;
+            
+            // Check if we already have this IMDb ID in the list
+            if (item.imdbId && movies.some(m => m.id === `imdb-movie-${item.imdbId}`)) return;
+
+            movies.push({
+              id: `imdb-movie-${item.imdbId || item.id}`,
+              type: 'MOVIE' as const,
+              title: item.title,
+              franchise: `${item.title} Franchise`,
+              coverImage: item.photo_url?.[0] || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
+              synopsis: `Year: ${item.year || 'N/A'}. AKA: ${item.title}. (JustWatch)`,
+              totalProgress: 1,
+              progressType: 'episode' as const
+            });
+          });
+        } catch (jwErr) {
+          console.error("JustWatch search error in MOVIE:", jwErr);
+        }
+
+        dynamicResults = movies;
       } else {
         // ALL
         let mappedShows: any[] = [];
@@ -1181,16 +1319,7 @@ app.get('/api/search', async (req: Request, res: Response) => {
           const searchRes = await axios.get(tvmazeSearchUrl, { timeout: 4000 });
           const matches = searchRes.data || [];
 
-          const filteredMatches = matches.filter((matchItem: any) => {
-            const show = matchItem.show;
-            if (!show) return false;
-            if (show.language === 'Hindi' && show.network !== null) {
-              return false;
-            }
-            return true;
-          });
-
-          await Promise.all(filteredMatches.slice(0, 2).map(async (matchItem: any) => {
+          await Promise.all(matches.slice(0, 2).map(async (matchItem: any) => {
             const show = matchItem.show;
             if (!show) return;
             try {
@@ -1273,7 +1402,347 @@ app.get('/api/search', async (req: Request, res: Response) => {
     return res.json(dynamicResults);
   } catch (error) {
     console.error('Error executing search API:', error);
-    return res.status(500).json({ error: 'Search failed' });
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+app.get('/api/releases', async (req: Request, res: Response) => {
+  try {
+    const timeframe = (req.query.timeframe as string) === 'monthly' ? 'monthly' : 'weekly';
+    const apiKey = process.env.TMDB_API_KEY || '';
+
+    const now = new Date();
+
+    const startOfWeek = new Date(now);
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    startOfWeek.setDate(diff);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    endOfMonth.setHours(23, 59, 59, 999);
+
+    const startDate = timeframe === 'monthly' ? startOfMonth : startOfWeek;
+    const endDate = timeframe === 'monthly' ? endOfMonth : endOfWeek;
+
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+
+    const results: { movies: any[]; series: any[]; anime: any[] } = {
+      movies: [],
+      series: [],
+      anime: []
+    };
+
+    try {
+      const movieStartDate = new Date(now);
+      movieStartDate.setDate(now.getDate() - 30);
+      const movieEndDate = new Date(now);
+      movieEndDate.setDate(now.getDate() + 30);
+
+      const movieStartDateStr = movieStartDate.toISOString().split('T')[0];
+      const movieEndDateStr = movieEndDate.toISOString().split('T')[0];
+
+      if (apiKey && apiKey !== 'your_tmdb_api_key_here') {
+        const todayStr = now.toISOString().split('T')[0];
+
+        const thirtyDaysAgo = new Date(now);
+        thirtyDaysAgo.setDate(now.getDate() - 30);
+        const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+        const thirtyDaysAhead = new Date(now);
+        thirtyDaysAhead.setDate(now.getDate() + 30);
+        const thirtyDaysAheadStr = thirtyDaysAhead.toISOString().split('T')[0];
+
+        const urls = [
+          `https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&region=US&language=en-US`,
+          `https://api.themoviedb.org/3/movie/upcoming?api_key=${apiKey}&region=US&language=en-US`,
+          `https://api.themoviedb.org/3/discover/movie?api_key=${apiKey}&with_original_language=hi&region=IN&sort_by=release_date.desc&release_date.lte=${todayStr}&release_date.gte=${thirtyDaysAgoStr}&language=en-US`,
+          `https://api.themoviedb.org/3/discover/movie?api_key=${apiKey}&with_original_language=hi&region=IN&sort_by=release_date.asc&release_date.gte=${todayStr}&release_date.lte=${thirtyDaysAheadStr}&language=en-US`
+        ];
+
+        const responses = await Promise.all(
+          urls.map(url => axios.get(url).catch(() => ({ data: { results: [] } })))
+        );
+
+        const seenMovies = new Set<number>();
+        const list: any[] = [];
+
+        responses.forEach(res => {
+          const items = res.data?.results || [];
+          items.forEach((item: any) => {
+            if (seenMovies.has(item.id)) return;
+            seenMovies.add(item.id);
+            list.push({
+              id: `tmdb-movie-${item.id}`,
+              title: item.title,
+              franchise: `${item.title} Franchise`,
+              releaseDate: item.release_date,
+              coverImage: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+              synopsis: item.overview || 'No synopsis available.',
+              totalProgress: 1,
+              progressType: 'episode',
+              type: 'MOVIE',
+              rating: item.vote_average || 0,
+              popularity: item.popularity || 0
+            });
+          });
+        });
+        results.movies = list;
+      } else {
+        const queries = ["popular", "bollywood", "tollywood", "indian movie", "hindi movie", "telugu movie"];
+        const list: any[] = [];
+        const seenMovies = new Set<string>();
+
+        await Promise.all(queries.map(async (q) => {
+          try {
+            const url = `https://imdb.iamidiotareyoutoo.com/justwatch?q=${encodeURIComponent(q)}`;
+            const res = await axios.get(url, { timeout: 4000 });
+            const items = res.data?.description || [];
+            items.forEach((item: any) => {
+              if (item.type !== 'MOVIE') return;
+              const key = item.imdbId || item.title;
+              if (seenMovies.has(key)) return;
+              seenMovies.add(key);
+
+              const currentYear = now.getFullYear();
+              if (item.year && item.year !== currentYear) return;
+
+              list.push({
+                id: `imdb-movie-${item.imdbId || item.id}`,
+                title: item.title,
+                franchise: `${item.title} Franchise`,
+                releaseDate: now.toISOString().split('T')[0],
+                coverImage: item.photo_url?.[0] || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+                synopsis: `Year: ${item.year || currentYear}. (JustWatch Movie Release)`,
+                totalProgress: 1,
+                progressType: 'episode',
+                type: 'MOVIE',
+                rating: Math.max(5.0, 8.5 - (seenMovies.size * 0.2)),
+                popularity: 1000 - seenMovies.size
+              });
+            });
+          } catch (err) {
+          }
+        }));
+        results.movies = list;
+      }
+    } catch (err) {
+      console.error('Failed to fetch movie releases:', err);
+    }
+
+    try {
+      const seriesStartDateStr = startDateStr;
+
+      if (apiKey && apiKey !== 'your_tmdb_api_key_here') {
+        const usUrl = `https://api.themoviedb.org/3/discover/tv?api_key=${apiKey}&first_air_date.gte=${seriesStartDateStr}&first_air_date.lte=${endDateStr}&sort_by=popularity.desc&with_original_language=en&language=en-US`;
+        const inUrl = `https://api.themoviedb.org/3/discover/tv?api_key=${apiKey}&first_air_date.gte=${seriesStartDateStr}&first_air_date.lte=${endDateStr}&sort_by=popularity.desc&with_origin_country=IN&language=en-US`;
+
+        const [usRes, inRes] = await Promise.all([
+          axios.get(usUrl).catch(() => ({ data: { results: [] } })),
+          axios.get(inUrl).catch(() => ({ data: { results: [] } }))
+        ]);
+
+        const merged = [...(usRes.data?.results || []), ...(inRes.data?.results || [])];
+        const seenShows = new Set<number>();
+        const list: any[] = [];
+
+        merged.forEach((item: any) => {
+          if (seenShows.has(item.id)) return;
+          seenShows.add(item.id);
+          list.push({
+            id: `tmdb-tv-${item.id}`,
+            title: item.name,
+            franchise: `${item.name} Franchise`,
+            releaseDate: item.first_air_date,
+            coverImage: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+            synopsis: item.overview || 'No synopsis available.',
+            totalProgress: 10,
+            progressType: 'episode',
+            type: 'TV_SHOW',
+            rating: item.vote_average || 0,
+            popularity: item.popularity || 0
+          });
+        });
+        results.series = list;
+      } else {
+        const daysToFetch = timeframe === 'weekly' ? 7 : 14;
+        const dates: string[] = [];
+        const baseDate = timeframe === 'weekly' ? new Date(startOfWeek) : new Date(startOfMonth);
+        
+        for (let i = 0; i < daysToFetch; i++) {
+          const d = new Date(baseDate);
+          d.setDate(baseDate.getDate() + i);
+          dates.push(d.toISOString().split('T')[0]);
+        }
+
+        const tvmazeList: any[] = [];
+        const justWatchList: any[] = [];
+        const seenShows = new Set<string>();
+
+        await Promise.all(dates.map(async (dateStr) => {
+          try {
+            const dayUrl = `https://api.tvmaze.com/schedule?date=${dateStr}`;
+            const dayRes = await axios.get(dayUrl, { timeout: 3000 });
+            (dayRes.data || []).forEach((episode: any) => {
+              const show = episode.show;
+              if (!show) return;
+              if (show.type && show.type !== 'Scripted') return;
+              const key = `tvmaze-${show.id}`;
+              if (seenShows.has(key)) return;
+              seenShows.add(key);
+              tvmazeList.push({
+                id: `tvmaze-tv-${show.id}`,
+                title: show.name,
+                franchise: `${show.name} Franchise`,
+                releaseDate: dateStr,
+                coverImage: show.image?.medium || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+                synopsis: show.summary ? show.summary.replace(/<[^>]*>/g, '') : 'No synopsis available.',
+                totalProgress: 12,
+                progressType: 'episode',
+                type: 'TV_SHOW',
+                rating: show.rating?.average || 0,
+                popularity: show.weight || 0
+              });
+            });
+          } catch (err) {
+          }
+        }));
+
+        const streamingQueries = ["netflix", "prime video", "hotstar", "indian series", "hindi series", "telugu series"];
+        await Promise.all(streamingQueries.map(async (q) => {
+          try {
+            const url = `https://imdb.iamidiotareyoutoo.com/justwatch?q=${encodeURIComponent(q)}`;
+            const res = await axios.get(url, { timeout: 4000 });
+            const items = res.data?.description || [];
+            items.forEach((item: any) => {
+              if (item.type !== 'SHOW') return;
+              const key = `imdb-${item.imdbId || item.title}`;
+              if (seenShows.has(key)) return;
+              seenShows.add(key);
+
+              const currentYear = now.getFullYear();
+              if (item.year && item.year !== currentYear) return;
+
+              justWatchList.push({
+                id: `imdb-tv-${item.imdbId || item.id}`,
+                title: item.title,
+                franchise: `${item.title} Franchise`,
+                releaseDate: now.toISOString().split('T')[0],
+                coverImage: item.photo_url?.[0] || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+                synopsis: `Year: ${item.year || currentYear}. (Web Series Release)`,
+                totalProgress: 12,
+                progressType: 'episode',
+                type: 'TV_SHOW',
+                rating: Math.max(5.0, 8.5 - (seenShows.size * 0.2)),
+                popularity: 1000 - seenShows.size
+              });
+            });
+          } catch (err) {
+          }
+        }));
+
+        results.series = [...justWatchList, ...tvmazeList];
+      }
+    } catch (err) {
+      console.error('Failed to fetch series releases:', err);
+    }
+
+    try {
+      const query = `
+        query ($page: Int, $perPage: Int, $airingAt_greater: Int, $airingAt_lesser: Int) {
+          Page(page: $page, perPage: $perPage) {
+            airingSchedules(airingAt_greater: $airingAt_greater, airingAt_lesser: $airingAt_lesser, sort: [TIME]) {
+              id
+              airingAt
+              episode
+              media {
+                id
+                title {
+                  english
+                  romaji
+                  native
+                }
+                coverImage {
+                  large
+                }
+                description
+                averageScore
+                popularity
+              }
+            }
+          }
+        }
+      `;
+
+      const startTimestamp = Math.floor(startDate.getTime() / 1000);
+      const endTimestamp = Math.floor(endDate.getTime() / 1000);
+
+      const response = await axios.post('https://graphql.anilist.co', {
+        query,
+        variables: {
+          page: 1,
+          perPage: 30,
+          airingAt_greater: startTimestamp,
+          airingAt_lesser: endTimestamp
+        }
+      }, { timeout: 5000 });
+
+      const schedules = response.data?.data?.Page?.airingSchedules || [];
+      const seenAnime = new Set<number>();
+      const list: any[] = [];
+
+      schedules.forEach((item: any) => {
+        const media = item.media;
+        if (!media || seenAnime.has(media.id)) return;
+        seenAnime.add(media.id);
+        list.push({
+          id: `anilist-anime-${media.id}`,
+          title: media.title.english || media.title.romaji || media.title.native,
+          franchise: `${media.title.english || media.title.romaji || 'Anime'} Franchise`,
+          releaseDate: new Date(item.airingAt * 1000).toISOString().split('T')[0],
+          coverImage: media.coverImage.large || 'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60',
+          synopsis: media.description ? media.description.replace(/<[^>]*>/g, '') : 'No synopsis available.',
+          type: 'ANIME',
+          totalProgress: 12,
+          progressType: 'episode',
+          episode: item.episode,
+          rating: media.averageScore ? media.averageScore / 10 : 0,
+          popularity: media.popularity || 0
+        });
+      });
+      results.anime = list;
+    } catch (err) {
+      console.error('Failed to fetch anime releases:', err);
+    }
+
+    const sortByRatingAndDate = (a: any, b: any) => {
+      const rateA = a.rating || 0;
+      const rateB = b.rating || 0;
+      if (Math.abs(rateB - rateA) > 0.01) {
+        return rateB - rateA;
+      }
+      const popA = a.popularity || 0;
+      const popB = b.popularity || 0;
+      if (popB !== popA) {
+        return popB - popA;
+      }
+      return new Date(b.releaseDate).getTime() - new Date(a.releaseDate).getTime();
+    };
+
+    results.movies = results.movies.sort(sortByRatingAndDate).slice(0, 30);
+    results.series = results.series.sort(sortByRatingAndDate).slice(0, 30);
+    results.anime = results.anime.sort(sortByRatingAndDate).slice(0, 30);
+
+    res.json(results);
+  } catch (error) {
+    console.error('Error executing releases API:', error);
+    res.status(500).json({ error: 'Releases query failed' });
   }
 });
 
