@@ -34,7 +34,8 @@ import {
   Palette,
   Key,
   Star,
-  Calendar
+  Calendar,
+  SlidersHorizontal
 } from "lucide-react";
 import { trackEvent } from "../lib/analytics";
 
@@ -324,6 +325,7 @@ export default function Home() {
   const [loaderIndex, setLoaderIndex] = useState(0);
   const [activeTheme, setActiveTheme] = useState("sunset-crimson");
   const [isThemeOpen, setIsThemeOpen] = useState(false);
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [isLoadingWatchlist, setIsLoadingWatchlist] = useState(true);
   const [activeTab, setActiveTab] = useState<"ALL" | "ANIME" | "MANGA" | "TV_SHOW" | "MOVIE">("ALL");
@@ -1384,7 +1386,7 @@ export default function Home() {
 
   // Adds a searched item from AniList / TMDB catalogs to the ledger
   const handleAddMedia = (result: SearchResult) => {
-    if (mediaList.some((item) => item.title === result.title)) {
+    if (mediaList.some((item) => item.title.toLowerCase() === result.title.toLowerCase() && item.type === result.type)) {
       setNotificationMsg(`"${result.title}" is already in your tracking ledger!`);
       setShowNotification(true);
       setTimeout(() => setShowNotification(false), 3000);
@@ -2384,6 +2386,117 @@ export default function Home() {
         </div>
       )}
 
+      {/* MOBILE-ONLY FILTER DRAWER (Slide-Up Bottom Sheet) */}
+      {isFilterDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/85 backdrop-blur-md p-0 md:hidden animate-in fade-in duration-200">
+          <div className="glass-panel border-t border-[#1f212a] rounded-t-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom duration-300">
+            
+            {/* Drawer Header */}
+            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-[#ff2e43]" />
+                <h2 className="text-sm font-bold text-slate-100 uppercase tracking-wider">Filter Ledger</h2>
+              </div>
+              <button
+                onClick={() => setIsFilterDrawerOpen(false)}
+                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Drawer Content */}
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[60vh]">
+              {/* Media Type Section */}
+              <div className="space-y-3">
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Media Type
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: "All Media", value: "ALL" },
+                    { label: "Anime", value: "ANIME" },
+                    { label: "Manga", value: "MANGA" },
+                    { label: "Series", value: "TV_SHOW" },
+                    { label: "Movies", value: "MOVIE" }
+                  ].map((tab) => (
+                    <button
+                      key={tab.value}
+                      onClick={() => setActiveTab(tab.value as any)}
+                      className={`flex items-center justify-center gap-2 py-3.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all select-none duration-200 cursor-pointer ${
+                        activeTab === tab.value
+                          ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 border border-[#ff2e43]"
+                          : "bg-[#050608]/50 border border-[#1f212a] text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/30"
+                      } ${tab.value === "ALL" ? "col-span-2" : ""}`}
+                    >
+                      {tab.value === "ALL" && <Layers className="w-3.5 h-3.5" />}
+                      {tab.value === "ANIME" && <Film className="w-3.5 h-3.5" />}
+                      {tab.value === "MANGA" && <BookOpen className="w-3.5 h-3.5" />}
+                      {tab.value === "TV_SHOW" && <Tv className="w-3.5 h-3.5" />}
+                      {tab.value === "MOVIE" && <Play className="w-3.5 h-3.5" />}
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status Section */}
+              <div className="space-y-3">
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Progress Status
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: "All Statuses", value: "ALL" },
+                    { label: "Ongoing", value: "ONGOING" },
+                    { label: "Completed", value: "COMPLETED" }
+                  ].map((tab) => (
+                    <button
+                      key={tab.value}
+                      onClick={() => setStatusFilter(tab.value as any)}
+                      className={`flex items-center justify-center gap-1.5 py-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all select-none duration-200 cursor-pointer ${
+                        statusFilter === tab.value
+                          ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 border border-[#ff2e43]"
+                          : "bg-[#050608]/50 border border-[#1f212a] text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/30"
+                      }`}
+                    >
+                      {tab.value === "ALL" && <Layers className="w-3 h-3" />}
+                      {tab.value === "ONGOING" && <Activity className="w-3 h-3" />}
+                      {tab.value === "COMPLETED" && <CheckCircle className="w-3 h-3" />}
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer Footer Actions */}
+            <div className="p-5 border-t border-[#1f212a] bg-[#050608]/50 flex flex-col gap-3">
+              {/* Reset Link */}
+              {((activeTab !== "ALL") || (statusFilter !== "ALL")) && (
+                <button
+                  onClick={() => {
+                    setActiveTab("ALL");
+                    setStatusFilter("ALL");
+                  }}
+                  className="text-center text-[10px] font-extrabold uppercase tracking-widest text-slate-500 hover:text-[#ff2e43] py-1 transition-all"
+                >
+                  Reset Active Filters
+                </button>
+              )}
+              {/* Apply Primary CTA */}
+              <button
+                onClick={() => setIsFilterDrawerOpen(false)}
+                className="w-full py-3.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-[#ff2e43]/20 active:scale-95 text-center flex items-center justify-center gap-2 min-h-[44px]"
+              >
+                <span>Show {filteredMedia.length} Match{filteredMedia.length !== 1 ? "es" : ""}</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* DYNAMIC 'ADD MEDIA' DIALOG MODAL (Fully Mobile-Friendly) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
@@ -2462,7 +2575,7 @@ export default function Home() {
 
                       <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-[#1f212a]">
                         <span className="text-[10px] text-slate-550 font-medium">Released: {result.totalProgress} {result.progressType}s</span>
-                        {mediaList.some((item) => item.title.toLowerCase() === result.title.toLowerCase()) ? (
+                        {mediaList.some((item) => item.title.toLowerCase() === result.title.toLowerCase() && item.type === result.type) ? (
                           <div className="py-1.5 px-4 bg-emerald-955/20 border border-emerald-500/30 text-emerald-450 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-default">
                             <Check className="w-3.5 h-3.5 text-emerald-450" />
                             Added
@@ -2917,103 +3030,106 @@ export default function Home() {
         {/* 2. PROGRESS LIST LEDGER GRID (Order-1: Positioned first on mobile)        */}
         {/* ========================================================================= */}
         <section className={`lg:col-span-3 flex flex-col gap-6 order-1 lg:order-2 ${mobileActiveTab === "LIST" ? "flex" : "hidden"}`}>
+ 
+          {/* Unified Ledger Categories Controls */}
+          {(() => {
+            const activeFilterLabel = (() => {
+              const parts: string[] = [];
+              if (activeTab !== "ALL") {
+                const typeLabels: Record<string, string> = {
+                  ANIME: "Anime",
+                  MANGA: "Manga",
+                  TV_SHOW: "Series",
+                  MOVIE: "Movies"
+                };
+                parts.push(typeLabels[activeTab] || activeTab);
+              }
+              if (statusFilter !== "ALL") {
+                const statusLabels: Record<string, string> = {
+                  ONGOING: "Ongoing",
+                  COMPLETED: "Completed"
+                };
+                parts.push(statusLabels[statusFilter] || statusFilter);
+              }
+              return parts.length > 0 ? `Filters: ${parts.join(" • ")}` : "Filters (All)";
+            })();
 
-          {/* Mobile Ledger Categories Controls (Dropdowns to fit cleanly on single row) */}
-          <div className="flex md:hidden items-center justify-between bg-[#0f1015] border border-[#1f212a] p-2.5 rounded-2xl gap-2 w-full shadow-sm">
-            <div className="flex items-center gap-2 flex-1">
-              {/* Media Type Dropdown */}
-              <div className="relative flex-1">
-                <select
-                  value={activeTab}
-                  onChange={(e) => setActiveTab(e.target.value as any)}
-                  className="w-full bg-[#050608] border border-[#1f212a] text-[#f3f4f6] text-[10px] font-black uppercase tracking-wider rounded-xl pl-3.5 pr-8 py-2.5 appearance-none focus:outline-none focus:border-[#ff2e43]/50 transition-all cursor-pointer"
-                >
-                  <option value="ALL">All Media</option>
-                  <option value="ANIME">Anime</option>
-                  <option value="MANGA">Manga</option>
-                  <option value="TV_SHOW">TV Series</option>
-                  <option value="MOVIE">Movies</option>
-                </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 text-[8px] font-bold">▼</div>
-              </div>
-
-              {/* Status Dropdown */}
-              <div className="relative flex-1">
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as any)}
-                  className="w-full bg-[#050608] border border-[#1f212a] text-[#f3f4f6] text-[10px] font-black uppercase tracking-wider rounded-xl pl-3.5 pr-8 py-2.5 appearance-none focus:outline-none focus:border-[#ff2e43]/50 transition-all cursor-pointer"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="ONGOING">Ongoing</option>
-                  <option value="COMPLETED">Completed</option>
-                </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 text-[8px] font-bold">▼</div>
-              </div>
-            </div>
-
-            {/* Quick Stats Indicator */}
-            <span className="text-[10px] text-[#ff2e43] font-black bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3 py-2.5 rounded-xl uppercase tracking-widest whitespace-nowrap">
-              {filteredMedia.length}
-            </span>
-          </div>
-
-          {/* Desktop Ledger Categories Controls (Original premium pills selector) */}
-          <div className="hidden md:flex flex-row md:items-center justify-between bg-[#0f1015] border border-[#1f212a] p-2 rounded-2xl gap-3 shadow-sm">
-            
-            {/* Left side: Media Type selection */}
-            <div className="flex gap-1 overflow-x-auto no-scrollbar scroll-smooth w-full md:w-auto">
-              {[
-                { label: "All Media", value: "ALL" },
-                { label: "Anime", value: "ANIME" },
-                { label: "Manga", value: "MANGA" },
-                { label: "Series", value: "TV_SHOW" },
-                { label: "Movies", value: "MOVIE" }
-              ].map((tab) => (
-                <button
-                  key={tab.value}
-                  onClick={() => setActiveTab(tab.value as any)}
-                  className={`flex-1 md:flex-none text-center px-3.5 py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all whitespace-nowrap ${
-                    activeTab === tab.value
-                      ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/50"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Right side: Progress Status + Quick Stats Counter */}
-            <div className="flex flex-wrap sm:flex-nowrap items-center justify-between md:justify-end gap-3 w-full md:w-auto">
-              {/* Progress Status Filter Tabs */}
-              <div className="flex gap-1 bg-[#050608] p-1 rounded-xl border border-[#1f212a]/60">
-                {[
-                  { label: "All Statuses", value: "ALL" },
-                  { label: "Ongoing", value: "ONGOING" },
-                  { label: "Completed", value: "COMPLETED" }
-                ].map((tab) => (
+            return (
+              <div className="flex items-center justify-between bg-[#0f1015] border border-[#1f212a] p-2.5 md:p-2 rounded-2xl w-full shadow-sm">
+                
+                {/* Left side: Mobile Filter Trigger Button or Desktop Category Tabs */}
+                <div className="w-full md:w-auto">
+                  {/* Mobile Filter Trigger Button */}
                   <button
-                    key={tab.value}
-                    onClick={() => setStatusFilter(tab.value as any)}
-                    className={`px-3 py-1.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wider transition-all whitespace-nowrap ${
-                      statusFilter === tab.value
-                        ? "bg-[#ff2e43] text-white shadow-md shadow-[#ff2e43]/15"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
+                    onClick={() => setIsFilterDrawerOpen(true)}
+                    className="flex md:hidden items-center justify-center gap-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-200 border border-[#1f212a] px-4 py-2.5 rounded-xl font-extrabold text-[10px] uppercase tracking-wider transition-all active:scale-95 cursor-pointer w-full"
                   >
-                    {tab.label}
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-[#ff2e43]" />
+                    <span>{activeFilterLabel}</span>
+                    {/* Active Filters Summary Count Badge */}
+                    {((activeTab !== "ALL" ? 1 : 0) + (statusFilter !== "ALL" ? 1 : 0)) > 0 && (
+                      <span className="bg-[#ff2e43] text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md animate-kipulse ml-0.5">
+                        {(activeTab !== "ALL" ? 1 : 0) + (statusFilter !== "ALL" ? 1 : 0)}
+                      </span>
+                    )}
                   </button>
-                ))}
+
+                  {/* Desktop-only: Inline Category Tabs */}
+                  <div className="hidden md:flex gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
+                    {[
+                      { label: "All Media", value: "ALL" },
+                      { label: "Anime", value: "ANIME" },
+                      { label: "Manga", value: "MANGA" },
+                      { label: "Series", value: "TV_SHOW" },
+                      { label: "Movies", value: "MOVIE" }
+                    ].map((tab) => (
+                      <button
+                        key={tab.value}
+                        onClick={() => setActiveTab(tab.value as any)}
+                        className={`flex-shrink-0 text-center px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                          activeTab === tab.value
+                            ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20"
+                            : "text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/50"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Right side: Desktop-only Status tabs + Matches indicator */}
+                <div className="flex items-center gap-3">
+                  {/* Desktop-only: Inline Status filter tabs */}
+                  <div className="hidden md:flex gap-1 bg-[#050608] p-1 rounded-xl border border-[#1f212a]/60">
+                    {[
+                      { label: "All Statuses", value: "ALL" },
+                      { label: "Ongoing", value: "ONGOING" },
+                      { label: "Completed", value: "COMPLETED" }
+                    ].map((tab) => (
+                      <button
+                        key={tab.value}
+                        onClick={() => setStatusFilter(tab.value as any)}
+                        className={`px-3.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                          statusFilter === tab.value
+                            ? "bg-[#ff2e43] text-white shadow-md shadow-[#ff2e43]/15"
+                            : "text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Quick Stats Indicator (Matches badge) */}
+                  <span className="text-[9px] text-[#ff2e43] font-bold bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3.5 py-1.5 rounded-xl uppercase tracking-widest whitespace-nowrap">
+                    {filteredMedia.length} Match{filteredMedia.length !== 1 ? "es" : ""}
+                  </span>
+                </div>
+
               </div>
-
-              {/* Quick Stats Indicator */}
-              <span className="text-[9px] text-[#ff2e43] font-bold bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3 py-1.5 rounded-xl uppercase tracking-widest whitespace-nowrap">
-                {filteredMedia.length} Match{filteredMedia.length !== 1 ? "es" : ""}
-              </span>
-            </div>
-
-          </div>
+            );
+          })()}
 
           {/* DYNAMIC LIST LEDGER CONTAINER (Trakt vertical cards poster grid) */}
           {isLoadingWatchlist ? (
@@ -3381,7 +3497,7 @@ export default function Home() {
 
                     <div className="flex justify-between items-center mt-auto pt-1 border-t border-[#1f212a]/30">
                       <span className="text-[8px] text-slate-400 font-medium">{result.totalProgress} {result.progressType}s</span>
-                      {mediaList.some((item) => item.title.toLowerCase() === result.title.toLowerCase()) ? (
+                      {mediaList.some((item) => item.title.toLowerCase() === result.title.toLowerCase() && item.type === result.type) ? (
                         <div className="py-1 px-3 bg-emerald-955/20 border border-emerald-500/30 text-emerald-450 rounded-lg text-[9px] font-bold flex items-center gap-1 cursor-default">
                           <Check className="w-3 h-3 text-emerald-450" />
                           Added
@@ -3525,7 +3641,7 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-200">
                 {displayedReleases.map((item: any) => {
                   const alreadyAdded = mediaList.some(
-                    (m) => m.title.toLowerCase() === item.title.toLowerCase()
+                    (m) => m.title.toLowerCase() === item.title.toLowerCase() && m.type === item.type
                   );
 
                   return (
