@@ -35,7 +35,8 @@ import {
   Key,
   Star,
   Calendar,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Smartphone
 } from "lucide-react";
 import { trackEvent } from "../lib/analytics";
 
@@ -379,6 +380,11 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [customApiUrl, setCustomApiUrl] = useState("");
 
+  // PWA install states
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [isIosInstallOpen, setIsIosInstallOpen] = useState(false);
+
   // Change Password state
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [currentPasswordInput, setCurrentPasswordInput] = useState("");
@@ -407,12 +413,37 @@ export default function Home() {
     }
     // Initialize settings state
     setCustomApiUrl(localStorage.getItem("UMT_API_URL") || getApiBaseUrl());
-    
+
     // Load saved theme configuration
     const savedTheme = localStorage.getItem("UMT_ACTIVE_THEME");
     if (savedTheme && THEMES[savedTheme]) {
       setActiveTheme(savedTheme);
     }
+  }, []);
+
+  // Listen for the PWA install prompt event
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    // Check if running in standalone mode (already installed)
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+
+    if (isStandalone) {
+      setIsInstallable(false);
+    } else if (isIOS) {
+      setIsInstallable(true);
+    }
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    };
   }, []);
 
   // Synchronize modal search category selection with the currently active filter tab
@@ -518,6 +549,18 @@ export default function Home() {
     }
     setIsSettingsOpen(false);
     window.location.reload();
+  };
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`User response to the install prompt: ${outcome}`);
+      setDeferredPrompt(null);
+      setIsInstallable(false);
+    } else {
+      setIsIosInstallOpen(true);
+    }
   };
 
   const fetchWatchlist = () => {
@@ -657,7 +700,7 @@ export default function Home() {
   const filteredReleases = useMemo(() => {
     const listToFilter: any[] = [];
     if (!releases) return [];
-    
+
     if (selectedReleaseCategory === "ALL" || selectedReleaseCategory === "ANIME") {
       listToFilter.push(...(releases.anime || []));
     }
@@ -667,14 +710,14 @@ export default function Home() {
     if (selectedReleaseCategory === "ALL" || selectedReleaseCategory === "MOVIE") {
       listToFilter.push(...(releases.movies || []));
     }
-    
+
     return [...listToFilter].sort((a, b) => new Date(a.releaseDate).getTime() - new Date(b.releaseDate).getTime());
   }, [releases, selectedReleaseCategory]);
 
   const displayedReleases = useMemo(() => {
     if (!releaseSearchQuery.trim()) return filteredReleases;
     const query = releaseSearchQuery.toLowerCase().trim();
-    return filteredReleases.filter(item => 
+    return filteredReleases.filter(item =>
       (item.title && item.title.toLowerCase().includes(query)) ||
       (item.synopsis && item.synopsis.toLowerCase().includes(query)) ||
       (item.franchise && item.franchise.toLowerCase().includes(query))
@@ -2005,6 +2048,67 @@ export default function Home() {
         </div>
       )}
 
+      {/* iOS INSTALL INSTRUCTIONS MODAL */}
+      {isIosInstallOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
+          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
+            {/* Header */}
+            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-[#ff2e43]" />
+                <h2 className="text-base font-bold text-slate-100">Install BingeLog</h2>
+              </div>
+              <button
+                onClick={() => setIsIosInstallOpen(false)}
+                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="p-6 flex flex-col gap-5 text-slate-350 text-xs leading-relaxed font-medium">
+              <p>Add BingeLog to your home screen to use it as a native standalone app on your iPhone or iPad.</p>
+
+              <div className="flex flex-col gap-4 bg-[#050608] border border-[#1f212a] p-4 rounded-2xl">
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-[#1f212a] flex items-center justify-center text-[10px] font-black text-[#ff2e43] border border-white/5">1</span>
+                  <div>
+                    <p className="text-slate-200 font-bold mb-0.5">Open in Safari</p>
+                    <p className="text-[10px] text-slate-555">Make sure you are using Apple's Safari browser.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-[#1f212a] flex items-center justify-center text-[10px] font-black text-[#ff2e43] border border-white/5">2</span>
+                  <div>
+                    <p className="text-slate-200 font-bold mb-0.5">Tap the Share Button</p>
+                    <p className="text-[10px] text-slate-555">Tap the Share icon <span className="inline-block px-1.5 py-0.5 bg-[#1f212a] text-slate-300 rounded border border-white/5 mx-0.5 text-[8px] font-bold">Share</span> (the square with an arrow pointing up) at the bottom or top of Safari.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-[#1f212a] flex items-center justify-center text-[10px] font-black text-[#ff2e43] border border-white/5">3</span>
+                  <div>
+                    <p className="text-slate-200 font-bold mb-0.5">Add to Home Screen</p>
+                    <p className="text-[10px] text-slate-555">Scroll down the share list and tap <span className="text-slate-200 font-bold">Add to Home Screen</span>.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-[#1f212a] bg-[#0f1015]/50 flex justify-end px-6">
+              <button
+                onClick={() => setIsIosInstallOpen(false)}
+                className="px-5 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* THEME CUSTOMIZATION MODAL */}
       {isThemeOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4 animate-fade-in">
@@ -2040,11 +2144,10 @@ export default function Home() {
                         setActiveTheme(key);
                         localStorage.setItem("UMT_ACTIVE_THEME", key);
                       }}
-                      className={`relative w-full text-left p-4 rounded-2xl border transition-all duration-200 hover:scale-[1.02] flex flex-col justify-between h-36 focus:outline-none ${
-                        isActive
-                          ? "bg-[#1f212a] shadow-lg"
-                          : "bg-[#0f1015] hover:bg-[#1f212a]/50"
-                      }`}
+                      className={`relative w-full text-left p-4 rounded-2xl border transition-all duration-200 hover:scale-[1.02] flex flex-col justify-between h-36 focus:outline-none ${isActive
+                        ? "bg-[#1f212a] shadow-lg"
+                        : "bg-[#0f1015] hover:bg-[#1f212a]/50"
+                        }`}
                       style={{
                         borderColor: isActive ? theme.accent : "var(--color-card-border)",
                         boxShadow: isActive ? `0 0 15px rgba(${theme.accentRgb}, 0.15)` : "none"
@@ -2054,7 +2157,7 @@ export default function Home() {
                         <div className="flex justify-between items-center w-full">
                           <span className="text-xs font-bold text-slate-100">{theme.name}</span>
                           {isActive && (
-                            <span 
+                            <span
                               className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider text-white flex items-center gap-1"
                               style={{ backgroundColor: theme.accent }}
                             >
@@ -2250,11 +2353,10 @@ export default function Home() {
             <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
               {importMessage && (
                 <div
-                  className={`p-3 border rounded-xl text-xs font-semibold animate-in fade-in duration-250 ${
-                    importMessage.type === "success"
-                      ? "bg-emerald-955/20 border-emerald-500/30 text-emerald-450"
-                      : "bg-red-955/20 border-red-500/30 text-[#ff2e43]"
-                  }`}
+                  className={`p-3 border rounded-xl text-xs font-semibold animate-in fade-in duration-250 ${importMessage.type === "success"
+                    ? "bg-emerald-955/20 border-emerald-500/30 text-emerald-450"
+                    : "bg-red-955/20 border-red-500/30 text-[#ff2e43]"
+                    }`}
                 >
                   {importMessage.text}
                 </div>
@@ -2386,11 +2488,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* MOBILE-ONLY FILTER DRAWER (Slide-Up Bottom Sheet) */}
+      {/* MOBILE-ONLY FILTER DRAWER (Centered Modal Dialog) */}
       {isFilterDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/85 backdrop-blur-md p-0 md:hidden animate-in fade-in duration-200">
-          <div className="glass-panel border-t border-[#1f212a] rounded-t-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom duration-300">
-            
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 md:hidden animate-in fade-in duration-200">
+          <div className="glass-panel border border-[#1f212a] rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
+
             {/* Drawer Header */}
             <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
               <div className="flex items-center gap-2">
@@ -2423,11 +2525,10 @@ export default function Home() {
                     <button
                       key={tab.value}
                       onClick={() => setActiveTab(tab.value as any)}
-                      className={`flex items-center justify-center gap-2 py-3.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all select-none duration-200 cursor-pointer ${
-                        activeTab === tab.value
-                          ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 border border-[#ff2e43]"
-                          : "bg-[#050608]/50 border border-[#1f212a] text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/30"
-                      } ${tab.value === "ALL" ? "col-span-2" : ""}`}
+                      className={`flex items-center justify-center gap-2 py-3.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all select-none duration-200 cursor-pointer ${activeTab === tab.value
+                        ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 border border-[#ff2e43]"
+                        : "bg-[#050608]/50 border border-[#1f212a] text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/30"
+                        } ${tab.value === "ALL" ? "col-span-2" : ""}`}
                     >
                       {tab.value === "ALL" && <Layers className="w-3.5 h-3.5" />}
                       {tab.value === "ANIME" && <Film className="w-3.5 h-3.5" />}
@@ -2454,11 +2555,10 @@ export default function Home() {
                     <button
                       key={tab.value}
                       onClick={() => setStatusFilter(tab.value as any)}
-                      className={`flex items-center justify-center gap-1.5 py-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all select-none duration-200 cursor-pointer ${
-                        statusFilter === tab.value
-                          ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 border border-[#ff2e43]"
-                          : "bg-[#050608]/50 border border-[#1f212a] text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/30"
-                      }`}
+                      className={`flex items-center justify-center gap-1.5 py-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all select-none duration-200 cursor-pointer ${statusFilter === tab.value
+                        ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 border border-[#ff2e43]"
+                        : "bg-[#050608]/50 border border-[#1f212a] text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/30"
+                        }`}
                     >
                       {tab.value === "ALL" && <Layers className="w-3 h-3" />}
                       {tab.value === "ONGOING" && <Activity className="w-3 h-3" />}
@@ -2506,7 +2606,7 @@ export default function Home() {
             <div className="p-5 sm:p-6 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
               <div className="flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-[#ff2e43]" />
-                <h2 className="text-base sm:text-lg font-bold text-slate-100">Add New Media (Live Sync)</h2>
+                <h2 className="text-base sm:text-lg font-bold text-slate-100">Add New Media</h2>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -2604,8 +2704,8 @@ export default function Home() {
 
             {/* Modal Footer Info */}
             <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-between items-center text-[10px] text-slate-500 font-semibold px-6">
-              <span>Dynamic API Connected: AniList & TVmaze/YTS</span>
-              <span className="hidden sm:flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-slate-400" /> Real-time caching</span>
+              <span></span>
+              <span className="hidden sm:flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-slate-400" /></span>
             </div>
 
           </div>
@@ -2660,8 +2760,8 @@ export default function Home() {
 
                       <div className="flex flex-wrap items-center gap-2.5 mt-3">
                         <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider ${isCompleted
-                            ? "bg-emerald-950 text-emerald-400 border border-emerald-500/25"
-                            : "bg-[#ff2e43]/15 text-[#ff2e43] border border-[#ff2e43]/20"
+                          ? "bg-emerald-950 text-emerald-400 border border-emerald-500/25"
+                          : "bg-[#ff2e43]/15 text-[#ff2e43] border border-[#ff2e43]/20"
                           }`}>
                           {isCompleted ? "Completed" : "Releasing / Tracking"}
                         </span>
@@ -2733,8 +2833,8 @@ export default function Home() {
                       disabled={isCompleted}
                       onClick={() => handleIncrement(detailsItem.id)}
                       className={`flex-1 py-3 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-h-[42px] ${isCompleted
-                          ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
-                          : "bg-[#ff2e43] hover:bg-[#e02034] text-white shadow-lg shadow-[#ff2e43]/25 active:scale-95"
+                        ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
+                        : "bg-[#ff2e43] hover:bg-[#e02034] text-white shadow-lg shadow-[#ff2e43]/25 active:scale-95"
                         }`}
                     >
                       {isCompleted ? (
@@ -2754,8 +2854,8 @@ export default function Home() {
                       onClick={(e) => handleCatchUp(detailsItem.id, e)}
                       disabled={isCompleted}
                       className={`flex-1 py-3 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-h-[42px] ${isCompleted
-                          ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
-                          : "bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-300 hover:text-white active:scale-95"
+                        ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
+                        : "bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-300 hover:text-white active:scale-95"
                         }`}
                     >
                       <Bookmark className="w-4 h-4" />
@@ -2887,6 +2987,15 @@ export default function Home() {
               >
                 <Puzzle className="w-4 h-4" />
               </button>
+              {isInstallable && (
+                <button
+                  onClick={handleInstallClick}
+                  className="p-2 bg-[#ff2e43]/10 border border-[#ff2e43]/30 text-[#ff2e43] hover:bg-[#ff2e43] hover:text-white hover:border-[#ff2e43] rounded-xl transition-all active:scale-95"
+                  title="Install BingeLog App"
+                >
+                  <Smartphone className="w-4 h-4" />
+                </button>
+              )}
               <button
                 onClick={() => setIsThemeOpen(true)}
                 className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-slate-100 hover:border-slate-800 rounded-xl transition-all active:scale-95"
@@ -2938,11 +3047,10 @@ export default function Home() {
                 <button
                   key={`desktop-nav-${tab.id}`}
                   onClick={() => setMobileActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 ${
-                    isActive
-                      ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 scale-[1.03]"
-                      : "text-slate-400 hover:text-slate-100 hover:bg-[#1f212a]/50"
-                  }`}
+                  className={`flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 ${isActive
+                    ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 scale-[1.03]"
+                    : "text-slate-400 hover:text-slate-100 hover:bg-[#1f212a]/50"
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   {tab.label}
@@ -3030,7 +3138,7 @@ export default function Home() {
         {/* 2. PROGRESS LIST LEDGER GRID (Order-1: Positioned first on mobile)        */}
         {/* ========================================================================= */}
         <section className={`lg:col-span-3 flex flex-col gap-6 order-1 lg:order-2 ${mobileActiveTab === "LIST" ? "flex" : "hidden"}`}>
- 
+
           {/* Unified Ledger Categories Controls */}
           {(() => {
             const activeFilterLabel = (() => {
@@ -3055,27 +3163,35 @@ export default function Home() {
             })();
 
             return (
-              <div className="flex items-center justify-between bg-[#0f1015] border border-[#1f212a] p-2.5 md:p-2 rounded-2xl w-full shadow-sm">
-                
-                {/* Left side: Mobile Filter Trigger Button or Desktop Category Tabs */}
-                <div className="w-full md:w-auto">
+              <div className="bg-[#0f1015] border border-[#1f212a] p-2.5 md:p-2 rounded-2xl w-full shadow-sm">
+
+                {/* Mobile View: side-by-side aligned elements */}
+                <div className="flex md:hidden items-center gap-2 w-full">
                   {/* Mobile Filter Trigger Button */}
                   <button
                     onClick={() => setIsFilterDrawerOpen(true)}
-                    className="flex md:hidden items-center justify-center gap-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-200 border border-[#1f212a] px-4 py-2.5 rounded-xl font-extrabold text-[10px] uppercase tracking-wider transition-all active:scale-95 cursor-pointer w-full"
+                    className="flex-grow flex items-center justify-center gap-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-200 border border-[#1f212a] px-4 py-2.5 rounded-xl font-extrabold text-[10px] uppercase tracking-wider transition-all active:scale-95 cursor-pointer min-h-[40px]"
                   >
                     <SlidersHorizontal className="w-3.5 h-3.5 text-[#ff2e43]" />
                     <span>{activeFilterLabel}</span>
                     {/* Active Filters Summary Count Badge */}
                     {((activeTab !== "ALL" ? 1 : 0) + (statusFilter !== "ALL" ? 1 : 0)) > 0 && (
-                      <span className="bg-[#ff2e43] text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md animate-kipulse ml-0.5">
+                      <span className="bg-[#ff2e43] text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md animate-pulse">
                         {(activeTab !== "ALL" ? 1 : 0) + (statusFilter !== "ALL" ? 1 : 0)}
                       </span>
                     )}
                   </button>
 
-                  {/* Desktop-only: Inline Category Tabs */}
-                  <div className="hidden md:flex gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
+                  {/* Matches indicator (matches layout height and typography) */}
+                  <div className="flex-shrink-0 flex items-center justify-center bg-[#ff2e43]/10 border border-[#ff2e43]/20 text-[#ff2e43] px-4 py-2.5 rounded-xl font-extrabold text-[10px] uppercase tracking-wider min-h-[40px] whitespace-nowrap">
+                    {filteredMedia.length} Match{filteredMedia.length !== 1 ? "es" : ""}
+                  </div>
+                </div>
+
+                {/* Desktop View: separate controls layout */}
+                <div className="hidden md:flex items-center justify-between w-full">
+                  {/* Category Tabs */}
+                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
                     {[
                       { label: "All Media", value: "ALL" },
                       { label: "Anime", value: "ANIME" },
@@ -3086,45 +3202,41 @@ export default function Home() {
                       <button
                         key={tab.value}
                         onClick={() => setActiveTab(tab.value as any)}
-                        className={`flex-shrink-0 text-center px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
-                          activeTab === tab.value
-                            ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20"
-                            : "text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/50"
-                        }`}
+                        className={`flex-shrink-0 text-center px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${activeTab === tab.value
+                          ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/50"
+                          }`}
                       >
                         {tab.label}
                       </button>
                     ))}
                   </div>
-                </div>
 
-                {/* Right side: Desktop-only Status tabs + Matches indicator */}
-                <div className="flex items-center gap-3">
-                  {/* Desktop-only: Inline Status filter tabs */}
-                  <div className="hidden md:flex gap-1 bg-[#050608] p-1 rounded-xl border border-[#1f212a]/60">
-                    {[
-                      { label: "All Statuses", value: "ALL" },
-                      { label: "Ongoing", value: "ONGOING" },
-                      { label: "Completed", value: "COMPLETED" }
-                    ].map((tab) => (
-                      <button
-                        key={tab.value}
-                        onClick={() => setStatusFilter(tab.value as any)}
-                        className={`px-3.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
-                          statusFilter === tab.value
+                  {/* Status tabs + Matches indicator */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1 bg-[#050608] p-1 rounded-xl border border-[#1f212a]/60">
+                      {[
+                        { label: "All Statuses", value: "ALL" },
+                        { label: "Ongoing", value: "ONGOING" },
+                        { label: "Completed", value: "COMPLETED" }
+                      ].map((tab) => (
+                        <button
+                          key={tab.value}
+                          onClick={() => setStatusFilter(tab.value as any)}
+                          className={`px-3.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${statusFilter === tab.value
                             ? "bg-[#ff2e43] text-white shadow-md shadow-[#ff2e43]/15"
                             : "text-slate-400 hover:text-slate-200"
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
+                            }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
 
-                  {/* Quick Stats Indicator (Matches badge) */}
-                  <span className="text-[9px] text-[#ff2e43] font-bold bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3.5 py-1.5 rounded-xl uppercase tracking-widest whitespace-nowrap">
-                    {filteredMedia.length} Match{filteredMedia.length !== 1 ? "es" : ""}
-                  </span>
+                    <span className="text-[9px] text-[#ff2e43] font-bold bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3.5 py-1.5 rounded-xl uppercase tracking-widest whitespace-nowrap">
+                      {filteredMedia.length} Match{filteredMedia.length !== 1 ? "es" : ""}
+                    </span>
+                  </div>
                 </div>
 
               </div>
@@ -3149,8 +3261,8 @@ export default function Home() {
                       setCustomValue(item.currentProgress.toString());
                     }}
                     className={`group relative bg-[#0f1015] border rounded-2xl overflow-hidden transition-all duration-300 flex flex-col shadow-md hover:translate-y-[-4px] cursor-pointer ${isCompleted
-                        ? "border-emerald-500/20 hover:border-emerald-500/40 hover:shadow-emerald-500/5"
-                        : "border-[#1f212a] hover:border-[#ff2e43]/30 hover:shadow-[#ff2e43]/5"
+                      ? "border-emerald-500/20 hover:border-emerald-500/40 hover:shadow-emerald-500/5"
+                      : "border-[#1f212a] hover:border-[#ff2e43]/30 hover:shadow-[#ff2e43]/5"
                       }`}
                   >
 
@@ -3167,20 +3279,20 @@ export default function Home() {
 
                       {/* Media Category Badge overlay */}
                       <span className={`absolute top-3 left-3 text-[8px] font-extrabold px-2 py-0.5 rounded-md border uppercase tracking-wider ${item.type === "ANIME"
-                          ? "bg-black/80 border-[#1f212a] text-[#ff2e43]"
-                          : item.type === "MANGA"
-                            ? "bg-black/80 border-[#1f212a] text-emerald-400"
-                            : item.type === "TV_SHOW"
-                              ? "bg-black/80 border-[#1f212a] text-indigo-400"
-                              : "bg-black/80 border-[#1f212a] text-fuchsia-400"
+                        ? "bg-black/80 border-[#1f212a] text-[#ff2e43]"
+                        : item.type === "MANGA"
+                          ? "bg-black/80 border-[#1f212a] text-emerald-400"
+                          : item.type === "TV_SHOW"
+                            ? "bg-black/80 border-[#1f212a] text-indigo-400"
+                            : "bg-black/80 border-[#1f212a] text-fuchsia-400"
                         }`}>
                         {item.type}
                       </span>
 
                       {/* Percent Pill Overlay */}
                       <span className={`absolute top-3 right-3 text-[9px] font-bold px-2 py-0.5 rounded-md ${isCompleted
-                          ? "bg-emerald-950/80 text-emerald-400 border border-emerald-500/30"
-                          : "bg-[#ff2e43]/15 text-[#ff2e43] border border-[#ff2e43]/20"
+                        ? "bg-emerald-950/80 text-emerald-400 border border-emerald-500/30"
+                        : "bg-[#ff2e43]/15 text-[#ff2e43] border border-[#ff2e43]/20"
                         }`}>
                         {percent}%
                       </span>
@@ -3298,8 +3410,8 @@ export default function Home() {
                           <div
                             style={{ width: `${percent}%` }}
                             className={`h-full rounded-full transition-all duration-500 ${isCompleted
-                                ? "bg-emerald-500"
-                                : "bg-[#ff2e43]"
+                              ? "bg-emerald-500"
+                              : "bg-[#ff2e43]"
                               }`}
                           />
                         </div>
@@ -3310,8 +3422,8 @@ export default function Home() {
                             disabled={isCompleted || item.id.startsWith("temp-")}
                             onClick={(e) => handleCatchUp(item.id, e)}
                             className={`flex-1 py-1.5 rounded-lg text-[9px] uppercase tracking-wider font-extrabold transition-all flex items-center justify-center gap-1 min-h-[30px] ${isCompleted || item.id.startsWith("temp-")
-                                ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
-                                : "bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-355 hover:text-white"
+                              ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
+                              : "bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-355 hover:text-white"
                               }`}
                           >
                             {isCompleted ? (
@@ -3537,7 +3649,7 @@ export default function Home() {
               </h2>
               <p className="text-[9px] text-slate-550 mt-0.5 font-medium">Live feeds of upcoming and newly released titles</p>
             </div>
-            
+
             {/* Search Input & Timeframe selector wrapper */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
               {/* Search input for releases */}
@@ -3570,11 +3682,10 @@ export default function Home() {
                     <button
                       key={tf.value}
                       onClick={() => setReleasesTimeframe(tf.value)}
-                      className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
-                        releasesTimeframe === tf.value
-                          ? "bg-[#ff2e43] text-white shadow-md shadow-[#ff2e43]/15"
-                          : "text-slate-400 hover:text-slate-200"
-                      }`}
+                      className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${releasesTimeframe === tf.value
+                        ? "bg-[#ff2e43] text-white shadow-md shadow-[#ff2e43]/15"
+                        : "text-slate-400 hover:text-slate-200"
+                        }`}
                     >
                       {tf.label}
                     </button>
@@ -3604,11 +3715,10 @@ export default function Home() {
                     setReleasesTimeframe("monthly");
                   }
                 }}
-                className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap ${
-                  selectedReleaseCategory === cat.value
-                    ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20"
-                    : "bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:bg-[#1f212a]/50 hover:text-slate-200"
-                }`}
+                className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap ${selectedReleaseCategory === cat.value
+                  ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20"
+                  : "bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:bg-[#1f212a]/50 hover:text-slate-200"
+                  }`}
               >
                 {cat.label}
               </button>
@@ -3777,6 +3887,16 @@ export default function Home() {
             <Puzzle className="w-4 h-4" />
             Extension Management
           </button>
+
+          {isInstallable && (
+            <button
+              onClick={handleInstallClick}
+              className="w-full py-3.5 bg-[#ff2e43]/10 hover:bg-[#ff2e43]/20 border border-[#ff2e43]/30 text-xs font-extrabold rounded-xl text-[#ff2e43] transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
+            >
+              <Smartphone className="w-4 h-4" />
+              Install BingeLog App
+            </button>
+          )}
 
           <button
             onClick={() => setIsThemeOpen(true)}
