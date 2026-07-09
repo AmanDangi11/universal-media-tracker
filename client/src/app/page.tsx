@@ -4073,13 +4073,13 @@ export default function Home() {
 
 
       {/* Mobile Floating Bottom Bar */}
-      <div className="md:hidden fixed bottom-4 left-4 right-4 z-40 bg-[#0f1015]/90 border border-[#1f212a] p-2.5 rounded-2xl flex justify-around shadow-2xl items-center backdrop-blur-md">
+      <div className="md:hidden fixed bottom-4 left-3 right-3 z-40 bg-[#0f1015]/95 border border-[#1f212a] p-1.5 rounded-2xl grid grid-cols-5 shadow-2xl items-center backdrop-blur-md">
         {[
-          { id: "LIST", label: "My Ledger", icon: BookOpen },
+          { id: "LIST", label: "Ledger", icon: BookOpen },
           { id: "CALENDAR", label: "Airing", icon: Tv },
           { id: "DISCOVER", label: "Discover", icon: Search },
           { id: "RELEASES", label: "Releases", icon: Sparkles },
-          { id: "STATS", label: "Analytics", icon: Layers }
+          { id: "STATS", label: "Stats", icon: Layers }
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = mobileActiveTab === tab.id;
@@ -4087,13 +4087,13 @@ export default function Home() {
             <button
               key={`bottom-nav-${tab.id}`}
               onClick={() => setMobileActiveTab(tab.id as any)}
-              className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all relative ${isActive ? "text-[#ff2e43] font-bold" : "text-slate-500 hover:text-slate-300"
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all relative ${isActive ? "text-[#ff2e43] font-bold" : "text-slate-500 hover:text-slate-300"
                 }`}
             >
-              <Icon className="w-5 h-5 flex-shrink-0 animate-in fade-in" />
-              <span className="text-[9px] mt-1 font-bold tracking-wider uppercase">{tab.label}</span>
+              <Icon className="w-4.5 h-4.5 flex-shrink-0 animate-in fade-in" />
+              <span className="text-[8px] xs:text-[9px] mt-1 font-bold tracking-tight uppercase text-center block w-full truncate">{tab.label}</span>
               {isActive && (
-                <span className="absolute bottom-0 w-4 h-0.5 bg-[#ff2e43] rounded-full" />
+                <span className="absolute bottom-0 w-3 h-0.5 bg-[#ff2e43] rounded-full" />
               )}
             </button>
           );
