@@ -446,6 +446,65 @@ export default function Home() {
     };
   }, []);
 
+  // Synchronize mobileActiveTab with URL hash for browser history / back swipe support
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tabHashes: Record<string, string> = {
+      LIST: "#ledger",
+      CALENDAR: "#airing",
+      DISCOVER: "#discover",
+      RELEASES: "#releases",
+      STATS: "#analytics"
+    };
+
+    const currentHash = window.location.hash;
+    const targetHash = tabHashes[mobileActiveTab];
+
+    if (currentHash !== targetHash) {
+      window.history.pushState({ tab: mobileActiveTab }, "", targetHash || "#ledger");
+    }
+  }, [mobileActiveTab]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handlePopState = (event: PopStateEvent) => {
+      const hashToTab: Record<string, "LIST" | "CALENDAR" | "DISCOVER" | "RELEASES" | "STATS"> = {
+        "#ledger": "LIST",
+        "#airing": "CALENDAR",
+        "#discover": "DISCOVER",
+        "#releases": "RELEASES",
+        "#analytics": "STATS"
+      };
+
+      const newHash = window.location.hash;
+      const tab = hashToTab[newHash];
+      if (tab) {
+        setMobileActiveTab(tab);
+      } else {
+        setMobileActiveTab("LIST");
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    // Initial check on mount to load correct tab from URL hash
+    const hashToTab: Record<string, "LIST" | "CALENDAR" | "DISCOVER" | "RELEASES" | "STATS"> = {
+      "#ledger": "LIST",
+      "#airing": "CALENDAR",
+      "#discover": "DISCOVER",
+      "#releases": "RELEASES",
+      "#analytics": "STATS"
+    };
+    const initialTab = hashToTab[window.location.hash];
+    if (initialTab) {
+      setMobileActiveTab(initialTab);
+    }
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
   // Synchronize modal search category selection with the currently active filter tab
   useEffect(() => {
     setSelectedMediaType(activeTab);
