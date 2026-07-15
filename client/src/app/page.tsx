@@ -814,7 +814,8 @@ export default function Home() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!usernameInput || !emailInput || !passwordInput) {
+    const cleanEmail = emailInput.trim().toLowerCase();
+    if (!usernameInput || !cleanEmail || !passwordInput) {
       setAuthError("All fields are required");
       return;
     }
@@ -824,7 +825,7 @@ export default function Home() {
       const res = await fetch(`${getApiBaseUrl()}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: usernameInput, email: emailInput, password: passwordInput })
+        body: JSON.stringify({ username: usernameInput, email: cleanEmail, password: passwordInput })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -848,7 +849,8 @@ export default function Home() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emailInput || !passwordInput) {
+    const cleanEmail = emailInput.trim().toLowerCase();
+    if (!cleanEmail || !passwordInput) {
       setAuthError("Email and password are required");
       return;
     }
@@ -858,7 +860,7 @@ export default function Home() {
       const res = await fetch(`${getApiBaseUrl()}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailInput, password: passwordInput })
+        body: JSON.stringify({ email: cleanEmail, password: passwordInput })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -881,7 +883,8 @@ export default function Home() {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emailInput) {
+    const cleanEmail = emailInput.trim().toLowerCase();
+    if (!cleanEmail) {
       setAuthError("Email is required");
       return;
     }
@@ -892,7 +895,7 @@ export default function Home() {
       const res = await fetch(`${getApiBaseUrl()}/api/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailInput })
+        body: JSON.stringify({ email: cleanEmail })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -910,7 +913,8 @@ export default function Home() {
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emailInput || !otpInput || !newPasswordInput) {
+    const cleanEmail = emailInput.trim().toLowerCase();
+    if (!cleanEmail || !otpInput || !newPasswordInput) {
       setAuthError("All fields are required");
       return;
     }
@@ -921,7 +925,7 @@ export default function Home() {
       const res = await fetch(`${getApiBaseUrl()}/api/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailInput, otp: otpInput, newPassword: newPasswordInput })
+        body: JSON.stringify({ email: cleanEmail, otp: otpInput, newPassword: newPasswordInput })
       });
       const data = await res.json();
       if (!res.ok) {

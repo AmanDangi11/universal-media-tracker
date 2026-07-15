@@ -75,11 +75,13 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Username, email, and password are required' });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Check if user already exists
     const existingUser = await prisma.user.findFirst({
       where: {
         OR: [
-          { email },
+          { email: normalizedEmail },
           { username }
         ]
       }
@@ -96,7 +98,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
     const user = await prisma.user.create({
       data: {
         username,
-        email,
+        email: normalizedEmail,
         passwordHash
       }
     });
@@ -116,13 +118,14 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Registration failed, falling back to mock authentication:', error);
     const token = jwt.sign({ userId: 'mock-user-id' }, JWT_SECRET, { expiresIn: '7d' });
+    const normalizedEmail = req.body.email ? req.body.email.trim().toLowerCase() : 'mock_user@example.com';
     res.status(201).json({
       message: 'User registered successfully (Mock Mode)',
       token,
       user: {
         id: 'mock-user-id',
         username: req.body.username || 'mock_user',
-        email: req.body.email || 'mock_user@example.com'
+        email: normalizedEmail
       }
     });
   }
@@ -137,9 +140,11 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Find the user
     const user = await prisma.user.findUnique({
-      where: { email }
+      where: { email: normalizedEmail }
     });
 
     if (!user) {
@@ -167,13 +172,14 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Login failed, falling back to mock authentication:', error);
     const token = jwt.sign({ userId: 'mock-user-id' }, JWT_SECRET, { expiresIn: '7d' });
+    const normalizedEmail = req.body.email ? req.body.email.trim().toLowerCase() : 'mock_user@example.com';
     res.status(200).json({
       message: 'Login successful (Mock Mode)',
       token,
       user: {
         id: 'mock-user-id',
         username: 'mock_user',
-        email: req.body.email || 'mock_user@example.com'
+        email: normalizedEmail
       }
     });
   }
@@ -188,9 +194,11 @@ app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email is required' });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Check if user exists
     const user = await prisma.user.findUnique({
-      where: { email }
+      where: { email: normalizedEmail }
     });
 
     if (!user) {
@@ -229,7 +237,7 @@ app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
       </div>
     `;
 
-    await EmailService.sendEmail(email, emailSubject, emailHtml);
+    await EmailService.sendEmail(normalizedEmail, emailSubject, emailHtml);
 
     res.status(200).json({ message: 'If the email exists in our system, a verification code has been sent.' });
   } catch (error) {
@@ -247,9 +255,11 @@ app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email, verification code, and new password are required' });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Find the user
     const user = await prisma.user.findUnique({
-      where: { email }
+      where: { email: normalizedEmail }
     });
 
     if (!user || !user.resetOtp || !user.resetOtpExpires) {
