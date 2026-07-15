@@ -31,10 +31,24 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
     return res.status(401).json({ error: 'Authentication token required' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, decoded: any) => {
+  jwt.verify(token, JWT_SECRET, async (err, decoded: any) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
+
+    // Verify user exists in the database to prevent foreign key errors (e.g. if DB was reset)
+    try {
+      const userExists = await prisma.user.findUnique({
+        where: { id: decoded.userId }
+      });
+      if (!userExists) {
+        return res.status(401).json({ error: 'User session invalid, please sign in again' });
+      }
+    } catch (dbErr) {
+      // If the database is unreachable, allow it to fall back to mock session support
+      console.warn('[Auth Middleware] Database check failed, allowing fallback session:', dbErr);
+    }
+
     req.userId = decoded.userId;
     next();
   });

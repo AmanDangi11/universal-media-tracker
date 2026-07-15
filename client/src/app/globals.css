@@ -79,12 +79,7 @@ body {
   box-shadow: 0 10px 30px -10px rgba(255, 46, 67, 0.15);
 }
 
-/* Professional notch and status bar safe areas for mobile app wrappers */
+/* Custom safe area settings */
 header {
   padding-top: calc(12px + env(safe-area-inset-top, 0px)) !important;
-}
-
-/* Adjust the floating bottom mobile navigation bar on device with home indicator */
-.fixed.bottom-4 {
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
 }

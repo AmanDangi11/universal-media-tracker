@@ -984,6 +984,11 @@ export default function Home() {
           newPassword: changePasswordNewInput
         })
       });
+      if (res.status === 401 || res.status === 403) {
+        handleLogout();
+        setIsChangePasswordOpen(false);
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         setChangePasswordError(data.error || "Failed to change password");
@@ -1008,6 +1013,11 @@ export default function Home() {
           "Authorization": `Bearer ${token}`
         }
       });
+      if (res.status === 401 || res.status === 403) {
+        handleLogout();
+        setIsImportExportOpen(false);
+        return;
+      }
       if (!res.ok) {
         throw new Error("Failed to export watchlist");
       }
@@ -1096,6 +1106,11 @@ export default function Home() {
             body: JSON.stringify(payload)
           });
 
+          if (res.status === 401 || res.status === 403) {
+            handleLogout();
+            setIsImportExportOpen(false);
+            return;
+          }
           if (res.ok) {
             const data = await res.json();
             totalImported += data.imported ?? (data.count || chunk.length);
@@ -1352,7 +1367,13 @@ export default function Home() {
                   progressId: id,
                   type: "increment"
                 })
-              }).catch((err) => console.error("Failed to sync progress increment:", err));
+              })
+                .then((res) => {
+                  if (res.status === 401 || res.status === 403) {
+                    handleLogout();
+                  }
+                })
+                .catch((err) => console.error("Failed to sync progress increment:", err));
             }
 
             trackEvent("increment_progress", "media", item.title, nextProgress);
@@ -1390,7 +1411,13 @@ export default function Home() {
                 progressId: id,
                 type: "catchup"
               })
-            }).catch((err) => console.error("Failed to sync progress catchup:", err));
+            })
+              .then((res) => {
+                if (res.status === 401 || res.status === 403) {
+                  handleLogout();
+                }
+              })
+              .catch((err) => console.error("Failed to sync progress catchup:", err));
           }
 
           trackEvent("catchup_progress", "media", item.title, item.totalProgress);
@@ -1434,7 +1461,13 @@ export default function Home() {
                 type: "custom",
                 customValue: val.toString()
               })
-            }).catch((err) => console.error("Failed to sync custom progress:", err));
+            })
+              .then((res) => {
+                if (res.status === 401 || res.status === 403) {
+                  handleLogout();
+                }
+              })
+              .catch((err) => console.error("Failed to sync custom progress:", err));
           }
 
           trackEvent("custom_progress", "media", item.title, val);
@@ -1473,7 +1506,13 @@ export default function Home() {
                 progressId: id,
                 type: "reset"
               })
-            }).catch((err) => console.error("Failed to sync progress reset:", err));
+            })
+              .then((res) => {
+                if (res.status === 401 || res.status === 403) {
+                  handleLogout();
+                }
+              })
+              .catch((err) => console.error("Failed to sync progress reset:", err));
           }
 
           trackEvent("reset_progress", "media", item.title, 0);
@@ -1495,6 +1534,10 @@ export default function Home() {
           Authorization: `Bearer ${token}`
         }
       });
+      if (res.status === 401 || res.status === 403) {
+        handleLogout();
+        return;
+      }
       if (res.ok) {
         setMediaList((prev) => prev.filter((item) => item.id !== id));
         setSelectedDetailsItem(null);
@@ -1564,6 +1607,10 @@ export default function Home() {
         })
       })
         .then((res) => {
+          if (res.status === 401 || res.status === 403) {
+            handleLogout();
+            throw new Error("Session expired, logging out...");
+          }
           if (!res.ok) throw new Error("Failed to add to database");
           return res.json();
         })
@@ -3053,7 +3100,7 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-base font-black tracking-tight text-white flex items-center gap-1.5">
-                  Binge<span className="text-[#ff2e43]">Log</span>
+                  Binge<span className="text-[#ff2e43]">Log v1.1</span>
                 </h1>
                 <p className="text-[9px] text-slate-550 font-bold uppercase tracking-wider">Unified Entertainment Ledger</p>
               </div>
@@ -3265,7 +3312,7 @@ export default function Home() {
         {/* ========================================================================= */}
         {/* 2. PROGRESS LIST LEDGER GRID (Order-1: Positioned first on mobile)        */}
         {/* ========================================================================= */}
-        <section className={`lg:col-span-3 flex flex-col gap-6 order-1 lg:order-2 ${mobileActiveTab === "LIST" ? "flex" : "hidden"}`}>
+        <section className={`lg:col-span-3 flex flex-col gap-6 order-1 lg:order-2 pb-28 lg:pb-0 ${mobileActiveTab === "LIST" ? "flex" : "hidden"}`}>
 
           {/* Unified Ledger Categories Controls */}
           {(() => {
@@ -3628,7 +3675,7 @@ export default function Home() {
         {/* ========================================================================= */}
 
         {/* Airing Calendar Timeline Screen */}
-        <div className={`col-span-full flex flex-col gap-5 w-full max-w-4xl mx-auto pb-20 ${mobileActiveTab === "CALENDAR" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
+        <div className={`col-span-full flex flex-col gap-5 w-full max-w-4xl mx-auto pb-28 ${mobileActiveTab === "CALENDAR" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
           <div className="flex items-center justify-between border-b border-[#1f212a] pb-3">
             <div>
               <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
@@ -3674,7 +3721,7 @@ export default function Home() {
         </div>
 
         {/* Discover API Add Screen (Instant search on mobile) */}
-        <div className={`col-span-full flex flex-col gap-5 w-full max-w-4xl mx-auto pb-20 ${mobileActiveTab === "DISCOVER" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
+        <div className={`col-span-full flex flex-col gap-5 w-full max-w-4xl mx-auto pb-28 ${mobileActiveTab === "DISCOVER" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
           <div className="border-b border-[#1f212a] pb-3">
             <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
               <Search className="w-4 h-4 text-[#ff2e43]" />
@@ -3768,7 +3815,7 @@ export default function Home() {
         </div>
 
         {/* New Releases Screen */}
-        <div className={`col-span-full flex flex-col gap-5 w-full max-w-5xl mx-auto pb-20 ${mobileActiveTab === "RELEASES" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
+        <div className={`col-span-full flex flex-col gap-5 w-full max-w-5xl mx-auto pb-28 ${mobileActiveTab === "RELEASES" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#1f212a] pb-4">
             <div>
               <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
@@ -3958,7 +4005,7 @@ export default function Home() {
         </div>
 
         {/* Mobile Settings, Analytics & Sync state */}
-        <div className={`col-span-full flex flex-col gap-5 w-full max-w-5xl mx-auto pb-20 ${mobileActiveTab === "STATS" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
+        <div className={`col-span-full flex flex-col gap-5 w-full max-w-5xl mx-auto pb-28 ${mobileActiveTab === "STATS" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
           <div className="border-b border-[#1f212a] pb-3">
             <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
               <Activity className="w-4 h-4 text-[#ff2e43]" />
@@ -4141,8 +4188,8 @@ export default function Home() {
 
 
 
-      {/* Mobile Floating Bottom Bar */}
-      <div className="md:hidden fixed bottom-4 left-3 right-3 z-40 bg-[#0f1015]/95 border border-[#1f212a] p-1.5 rounded-2xl grid grid-cols-5 shadow-2xl items-center backdrop-blur-md">
+      {/* Mobile Docked Bottom Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0f1015] border-t border-[#1f212a] px-3 pt-2 pb-[calc(10px+env(safe-area-inset-bottom,0px))] grid grid-cols-5 shadow-2xl items-center rounded-t-2xl">
         {[
           { id: "LIST", label: "Ledger", icon: BookOpen },
           { id: "CALENDAR", label: "Airing", icon: Tv },
@@ -4152,6 +4199,7 @@ export default function Home() {
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = mobileActiveTab === tab.id;
+          const isAiring = tab.id === "CALENDAR";
           return (
             <button
               key={`bottom-nav-${tab.id}`}
@@ -4159,7 +4207,7 @@ export default function Home() {
               className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all relative ${isActive ? "text-[#ff2e43] font-bold" : "text-slate-500 hover:text-slate-300"
                 }`}
             >
-              <Icon className="w-4.5 h-4.5 flex-shrink-0 animate-in fade-in" />
+              <Icon className={`${isAiring ? "w-3.5 h-3.5" : "w-4 h-4"} flex-shrink-0 animate-in fade-in`} />
               <span className="text-[8px] xs:text-[9px] mt-1 font-bold tracking-tight uppercase text-center block w-full truncate">{tab.label}</span>
               {isActive && (
                 <span className="absolute bottom-0 w-3 h-0.5 bg-[#ff2e43] rounded-full" />
