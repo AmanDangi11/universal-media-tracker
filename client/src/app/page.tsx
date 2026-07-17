@@ -1,325 +1,44 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import {
-  Film,
-  BookOpen,
-  TrendingUp,
-  Tv,
-  Plus,
-  Play,
-  RotateCcw,
-  Sparkles,
-  Search,
-  CheckCircle,
-  Clock,
-  ExternalLink,
-  ChevronRight,
-  Database,
-  Layers,
-  Zap,
-  X,
-  PlusCircle,
-  HelpCircle,
-  Info,
-  Check,
-  Edit2,
-  Bookmark,
-  Settings,
-  Activity,
-  LogOut,
-  User,
-  Trash2,
-  Puzzle,
-  Palette,
-  Key,
-  Star,
-  Calendar,
-  SlidersHorizontal,
-  Smartphone
-} from "lucide-react";
-import { trackEvent } from "../lib/analytics";
+import React, { useState, useEffect } from "react";
+import { Zap, BookOpen, Tv, Search, Sparkles, Layers } from "lucide-react";
 
-// Types
-interface MediaItem {
-  id: string;
-  type: "ANIME" | "MANGA" | "LIGHT_NOVEL" | "TV_SHOW" | "MOVIE";
-  title: string;
-  franchise: string;
-  coverImage: string;
-  status: string;
-  currentProgress: number;
-  totalProgress: number;
-  progressType: "episode" | "chapter";
-  volume?: number;
-  lastUpdated: string;
-  synopsis?: string;
-  sourceMaterialProgress?: {
-    title: string;
-    current: number;
-    total: number;
-  };
-  nextAiringEpisode?: {
-    airingAt: number;
-    timeUntilAiring: number;
-    episode: number;
-  };
-}
+// Types & Constants
+import { MediaItem, SearchResult } from "../types/media";
+import { THEMES } from "../constants/theme";
+import { LOADERS_DATA } from "../constants/catalog";
+import { getApiBaseUrl } from "../services/apiClient";
+import * as watchlistService from "../services/watchlistService";
 
-interface SearchResult {
-  id: string;
-  type: "ANIME" | "MANGA" | "LIGHT_NOVEL" | "TV_SHOW" | "MOVIE";
-  title: string;
-  franchise: string;
-  coverImage: string;
-  synopsis: string;
-  totalProgress: number;
-  progressType: "episode" | "chapter";
-  nextAiringEpisode?: {
-    airingAt: number;
-    timeUntilAiring: number;
-    episode: number;
-  };
-}
+// Hooks
+import { useAuth } from "../hooks/useAuth";
+import { useWatchlist } from "../hooks/useWatchlist";
+import { useAiringSchedule } from "../hooks/useAiringSchedule";
 
-const GLOBAL_CATALOG: SearchResult[] = [
-  {
-    id: "cat-1",
-    type: "ANIME",
-    title: "Solo Leveling Season 1",
-    franchise: "Solo Leveling Franchise",
-    coverImage: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=500&auto=format&fit=crop&q=60",
-    synopsis: "In a world where hunters must battle deadly monsters, the weakest hunter Jinwoo Sung receives a mysterious system that allows him to level up without limits.",
-    totalProgress: 12,
-    progressType: "episode"
-  },
-  {
-    id: "cat-2",
-    type: "ANIME",
-    title: "Chainsaw Man",
-    franchise: "Chainsaw Man Franchise",
-    coverImage: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=500&auto=format&fit=crop&q=60",
-    synopsis: "Denji is a teenage devil hunter who merges with his pet devil Pochita, gaining the ability to transform parts of his body into chainsaws.",
-    totalProgress: 12,
-    progressType: "episode"
-  },
-  {
-    id: "cat-3",
-    type: "MANGA",
-    title: "Solo Leveling Webtoon",
-    franchise: "Solo Leveling Franchise",
-    coverImage: "https://images.unsplash.com/photo-1560942485-b2a11cc13456?w=500&auto=format&fit=crop&q=60",
-    synopsis: "The official webtoon adaptation of the hit web novel Solo Leveling, detailing Jinwoo Sung's ascension to the Shadow Monarch.",
-    totalProgress: 179,
-    progressType: "chapter"
-  },
-  {
-    id: "cat-4",
-    type: "MANGA",
-    title: "One Piece Manga",
-    franchise: "One Piece Franchise",
-    coverImage: "https://images.unsplash.com/photo-1563089145-599997674d42?w=500&auto=format&fit=crop&q=60",
-    synopsis: "Follow Monkey D. Luffy and his straw hat crew as they traverse the Grand Line in search of the legendary One Piece treasure.",
-    totalProgress: 1110,
-    progressType: "chapter"
-  },
-  {
-    id: "cat-5",
-    type: "TV_SHOW",
-    title: "House of the Dragon Season 2",
-    franchise: "Game of Thrones Franchise",
-    coverImage: "https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&auto=format&fit=crop&q=60",
-    synopsis: "The war of succession between Rhaenyra and Aegon Targaryen begins to tear Westeros apart in this epic adaptation of Fire & Blood.",
-    totalProgress: 8,
-    progressType: "episode"
-  },
-  {
-    id: "cat-6",
-    type: "MOVIE",
-    title: "Dune: Part Two",
-    franchise: "Dune Franchise",
-    coverImage: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60",
-    synopsis: "Paul Atreides unites with Chani and the Fremen while seeking revenge against the conspirators who destroyed his family.",
-    totalProgress: 1,
-    progressType: "episode"
-  }
-];
+// Layout & UI Components
+import { HeaderBar } from "../components/layout/HeaderBar";
+import { MobileNav, MobileTab } from "../components/layout/MobileNav";
+import { Loader } from "../components/ui/Loader";
 
-const INITIAL_MEDIA_LIST: MediaItem[] = [
-  {
-    id: "1",
-    type: "ANIME",
-    title: "Demon Slayer: Hashira Training Arc",
-    franchise: "Demon Slayer (Kimetsu no Yaiba)",
-    coverImage: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=500&auto=format&fit=crop&q=60",
-    status: "Releasing",
-    currentProgress: 4,
-    totalProgress: 8,
-    progressType: "episode",
-    lastUpdated: "2 hours ago",
-    sourceMaterialProgress: {
-      title: "Demon Slayer Manga",
-      current: 140,
-      total: 205
-    }
-  },
-  {
-    id: "2",
-    type: "MANGA",
-    title: "Jujutsu Kaisen",
-    franchise: "Jujutsu Kaisen Franchise",
-    coverImage: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=500&auto=format&fit=crop&q=60",
-    status: "Releasing",
-    currentProgress: 261,
-    totalProgress: 271,
-    progressType: "chapter",
-    lastUpdated: "Yesterday",
-    sourceMaterialProgress: {
-      title: "Jujutsu Kaisen Anime",
-      current: 47,
-      total: 47
-    }
-  }
-];
+// Feature Components
+import { MediaGrid } from "../components/features/watchlist/MediaGrid";
+import { QuickLogDrawer } from "../components/features/watchlist/QuickLogDrawer";
+import { MediaDetailsModal } from "../components/features/watchlist/MediaDetailsModal";
+import { FilterDrawerModal } from "../components/features/watchlist/FilterDrawerModal";
+import { SearchModal } from "../components/features/search/SearchModal";
+import { DiscoverView } from "../components/features/search/DiscoverView";
+import { AiringCalendarView } from "../components/features/calendar/AiringCalendarModal";
+import { ReleasesView } from "../components/features/releases/ReleasesView";
+import { AnalyticsStats } from "../components/features/stats/AnalyticsStats";
+import { AuthModal } from "../components/features/auth/AuthModal";
 
-interface AiringSchedule {
-  timeLabel: string;
-  details: string;
-}
-
-const getApiBaseUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== "undefined") {
-    const savedUrl = localStorage.getItem("UMT_API_URL");
-    if (savedUrl) {
-      return savedUrl;
-    }
-    const isCapacitor = (window as any).Capacitor !== undefined;
-    if (isCapacitor) {
-      const cap = (window as any).Capacitor;
-      if (cap.getPlatform() === "android") {
-        return "http://10.0.2.2:5001";
-      }
-      return "http://localhost:5001";
-    }
-    if (window.location.hostname === "14df525de8d485.lhr.life" || window.location.hostname === "3369ccf4201b95.lhr.life") {
-      return "https://ad35b38df0678b.lhr.life";
-    }
-    return `http://${window.location.hostname}:5001`;
-  }
-  return "http://localhost:5001";
-};
-
-const THEMES: Record<string, {
-  name: string;
-  description: string;
-  background: string;
-  foreground: string;
-  cardBg: string;
-  cardBgRgb: string;
-  cardBorder: string;
-  cardBorderRgb: string;
-  accent: string;
-  accentRgb: string;
-  accentHover: string;
-  hoverBg: string;
-}> = {
-  "sunset-crimson": {
-    name: "Sunset Crimson",
-    description: "Classic high-contrast dark gray and scarlet red.",
-    background: "#050608",
-    foreground: "#f3f4f6",
-    cardBg: "#0f1015",
-    cardBgRgb: "15, 16, 21",
-    cardBorder: "#1f212a",
-    cardBorderRgb: "31, 33, 42",
-    accent: "#ff2e43",
-    accentRgb: "255, 46, 67",
-    accentHover: "#e02034",
-    hoverBg: "#2b2e3b"
-  },
-  "midnight-indigo": {
-    name: "Midnight Indigo",
-    description: "Deep cyberspace violet with electric indigo accents.",
-    background: "#030712",
-    foreground: "#f3f4f6",
-    cardBg: "#0f172a",
-    cardBgRgb: "15, 23, 42",
-    cardBorder: "#1e293b",
-    cardBorderRgb: "30, 41, 59",
-    accent: "#818cf8",
-    accentRgb: "129, 140, 248",
-    accentHover: "#6366f1",
-    hoverBg: "#334155"
-  },
-  "emerald-forest": {
-    name: "Emerald Forest",
-    description: "Soothing deep jade green with vibrant emerald accents.",
-    background: "#022c22",
-    foreground: "#f0fdf4",
-    cardBg: "#064e3b",
-    cardBgRgb: "6, 78, 59",
-    cardBorder: "#115e59",
-    cardBorderRgb: "17, 94, 89",
-    accent: "#10b981",
-    accentRgb: "16, 185, 129",
-    accentHover: "#059669",
-    hoverBg: "#134e4a"
-  },
-  "sakura-blossom": {
-    name: "Sakura Blossom",
-    description: "Sweet dark rosewood with soft cherry blossom pink.",
-    background: "#180f12",
-    foreground: "#fdf2f8",
-    cardBg: "#271d22",
-    cardBgRgb: "39, 29, 34",
-    cardBorder: "#4c1d33",
-    cardBorderRgb: "76, 29, 51",
-    accent: "#ec4899",
-    accentRgb: "236, 72, 153",
-    accentHover: "#db2777",
-    hoverBg: "#5c2a41"
-  },
-  "oceanic-abyss": {
-    name: "Oceanic Abyss",
-    description: "Abyssal navy depths with glowing cyan coordinates.",
-    background: "#020813",
-    foreground: "#ecfeff",
-    cardBg: "#0b132b",
-    cardBgRgb: "11, 19, 43",
-    cardBorder: "#1c2541",
-    cardBorderRgb: "28, 37, 65",
-    accent: "#0ea5e9",
-    accentRgb: "14, 165, 233",
-    accentHover: "#0284c7",
-    hoverBg: "#3a506b"
-  }
-};
-
-const LOADERS_DATA = [
-  {
-    text: "Summoning magical girl sparkles...",
-    subtext: "Casting wand spells and loading list data (🪄💖)"
-  },
-  {
-    text: "Shinobi dash in progress...",
-    subtext: "Rushing through the database network (🥷💨)"
-  },
-  {
-    text: "Powering up energy reserves...",
-    subtext: "Charging cells past 9000! (⚡🔥)"
-  },
-  {
-    text: "Waking up database from its nap...",
-    subtext: "Totoro is breathing slowly... (💤🍃)"
-  },
-  {
-    text: "Serving fresh watchlist entries...",
-    subtext: "Rolling sushi logs down the conveyor (🍣🥢)"
-  }
-];
+// Settings Modals
+import { SettingsModal } from "../components/features/settings/SettingsModal";
+import { ThemeModal } from "../components/features/settings/ThemeModal";
+import { ChangePasswordModal } from "../components/features/settings/ChangePasswordModal";
+import { ImportExportModal } from "../components/features/settings/ImportExportModal";
+import { ExitAppModal } from "../components/features/settings/ExitAppModal";
+import { IosInstallModal } from "../components/features/settings/IosInstallModal";
 
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
@@ -327,102 +46,62 @@ export default function Home() {
   const [activeTheme, setActiveTheme] = useState("sunset-crimson");
   const [isThemeOpen, setIsThemeOpen] = useState(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
-  const [mediaList, setMediaList] = useState<MediaItem[]>([]);
-  const [isLoadingWatchlist, setIsLoadingWatchlist] = useState(true);
   const [activeTab, setActiveTab] = useState<"ALL" | "ANIME" | "MANGA" | "TV_SHOW" | "MOVIE">("ALL");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ONGOING" | "COMPLETED">("ALL");
-  const [mobileActiveTab, setMobileActiveTab] = useState<"LIST" | "CALENDAR" | "DISCOVER" | "RELEASES" | "STATS">("LIST");
-
-  // Releases states
-  const [releases, setReleases] = useState<{ movies: any[]; series: any[]; anime: any[] } | null>(null);
-  const [releasesTimeframe, setReleasesTimeframe] = useState<"weekly" | "monthly">("weekly");
-  const [isLoadingReleases, setIsLoadingReleases] = useState(false);
-  const [selectedReleaseCategory, setSelectedReleaseCategory] = useState<"ALL" | "ANIME" | "TV_SHOW" | "MOVIE">("ALL");
-  const [releaseSearchQuery, setReleaseSearchQuery] = useState("");
+  const [mobileActiveTab, setMobileActiveTab] = useState<MobileTab>("LIST");
   const [searchQuery, setSearchQuery] = useState("");
-  const [showNotification, setShowNotification] = useState(false);
-  const [notificationMsg, setNotificationMsg] = useState("");
-  const [dbConnected, setDbConnected] = useState(false);
 
-  // Authentication states
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<{ id: string; username: string; email: string } | null>(null);
-  const [authError, setAuthError] = useState("");
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [isForgotPassword, setIsForgotPassword] = useState(false);
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
-  const [authLoading, setAuthLoading] = useState(false);
-  const [usernameInput, setUsernameInput] = useState("");
-  const [emailInput, setEmailInput] = useState("");
-  const [passwordInput, setPasswordInput] = useState("");
-  const [otpInput, setOtpInput] = useState("");
-  const [newPasswordInput, setNewPasswordInput] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-
-  // Add Media Modal states
+  // Modals visibility
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalSearchQuery, setModalSearchQuery] = useState("");
-  const [selectedMediaType, setSelectedMediaType] = useState<"ALL" | "ANIME" | "MANGA" | "TV_SHOW" | "MOVIE">("ALL");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isLoadingSearch, setIsLoadingSearch] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isImportExportOpen, setIsImportExportOpen] = useState(false);
+  const [isExitModalOpen, setIsExitModalOpen] = useState(false);
+  const [isIosInstallOpen, setIsIosInstallOpen] = useState(false);
 
-  // Inline custom progress editor states
+  // Selected item for details modal
+  const [selectedDetailsItem, setSelectedDetailsItem] = useState<MediaItem | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [customValue, setCustomValue] = useState("");
-  const [selectedDetailsItem, setSelectedDetailsItem] = useState<MediaItem | null>(null);
-  const [fetchedDescriptions, setFetchedDescriptions] = useState<Record<string, string>>({});
-  const [loadingDescription, setLoadingDescription] = useState(false);
 
-  // Airing Calendar states: Derived dynamically from active watchlist!
-  const [airingCalendar, setAiringCalendar] = useState<{ id: string; title: string; schedule: AiringSchedule }[]>([]);
-
-  // Settings & Custom API URL configuration
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [customApiUrl, setCustomApiUrl] = useState("");
-
-  // PWA install states
+  // PWA & Import state
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
-  const [isIosInstallOpen, setIsIosInstallOpen] = useState(false);
-  const [isExitModalOpen, setIsExitModalOpen] = useState(false);
-
-  // Change Password state
-  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
-  const [currentPasswordInput, setCurrentPasswordInput] = useState("");
-  const [changePasswordNewInput, setChangePasswordNewInput] = useState("");
-  const [changePasswordConfirmInput, setChangePasswordConfirmInput] = useState("");
-  const [changePasswordError, setChangePasswordError] = useState("");
-  const [changePasswordSuccess, setChangePasswordSuccess] = useState("");
-  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
-
-  // Import / Export state
-  const [isImportExportOpen, setIsImportExportOpen] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number; percentage: number } | null>(null);
   const [isMinimizedImport, setIsMinimizedImport] = useState(false);
 
-  // Set isMounted to true on client mount to bypass Next.js hydration issues
+  // Custom Hooks
+  const { token, user, handleLogout, setAuthSession } = useAuth();
+  const {
+    mediaList,
+    setMediaList,
+    isLoadingWatchlist,
+    notificationMsg,
+    showNotification,
+    fetchWatchlist,
+    handleIncrement,
+    handleCatchUp,
+    handleSaveCustomProgress,
+    handleReset,
+    handleDeleteMedia,
+    handleAddMedia
+  } = useWatchlist(token, handleLogout);
+
+  const { airingCalendar } = useAiringSchedule(mediaList);
+
+  // Mount effect
   useEffect(() => {
     setIsMounted(true);
     setLoaderIndex(Math.floor(Math.random() * LOADERS_DATA.length));
-    const savedToken = localStorage.getItem("umt_token");
-    const savedUser = localStorage.getItem("umt_user");
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
-    }
-    // Initialize settings state
-    setCustomApiUrl(localStorage.getItem("UMT_API_URL") || getApiBaseUrl());
 
-    // Load saved theme configuration
     const savedTheme = localStorage.getItem("UMT_ACTIVE_THEME");
     if (savedTheme && THEMES[savedTheme]) {
       setActiveTheme(savedTheme);
     }
   }, []);
 
-  // Listen for the PWA install prompt event
+  // PWA install prompt handler
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
@@ -432,7 +111,6 @@ export default function Home() {
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
-    // Check if running in standalone mode (already installed)
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone;
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
 
@@ -447,7 +125,7 @@ export default function Home() {
     };
   }, []);
 
-  // Synchronize mobileActiveTab with URL hash for browser history / back swipe support
+  // Hash navigation sync for mobile back gesture
   useEffect(() => {
     if (typeof window === "undefined") return;
     const tabHashes: Record<string, string> = {
@@ -468,8 +146,8 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handlePopState = (event: PopStateEvent) => {
-      const hashToTab: Record<string, "LIST" | "CALENDAR" | "DISCOVER" | "RELEASES" | "STATS"> = {
+    const handlePopState = () => {
+      const hashToTab: Record<string, MobileTab> = {
         "#ledger": "LIST",
         "#airing": "CALENDAR",
         "#discover": "DISCOVER",
@@ -478,162 +156,40 @@ export default function Home() {
       };
 
       const newHash = window.location.hash;
-
-      // If they press back from the root tab (#ledger) and the hash becomes empty/exited
       if (!newHash || newHash === "") {
-        // Prevent exiting immediately: show our custom modal
         setIsExitModalOpen(true);
-        // Push the hash back so they don't exit the browser session
         window.history.pushState({ tab: "LIST" }, "", "#ledger");
         setMobileActiveTab("LIST");
         return;
       }
 
       const tab = hashToTab[newHash];
-      if (tab) {
-        setMobileActiveTab(tab);
-      } else {
-        setMobileActiveTab("LIST");
-      }
+      setMobileActiveTab(tab || "LIST");
     };
 
     window.addEventListener("popstate", handlePopState);
-
-    // Initial check on mount to load correct tab from URL hash
-    const hashToTab: Record<string, "LIST" | "CALENDAR" | "DISCOVER" | "RELEASES" | "STATS"> = {
-      "#ledger": "LIST",
-      "#airing": "CALENDAR",
-      "#discover": "DISCOVER",
-      "#releases": "RELEASES",
-      "#analytics": "STATS"
-    };
-
     if (!window.location.hash) {
-      // Force initial baseline hash if empty so back gesture can be intercepted
       window.history.replaceState({ tab: "LIST" }, "", "#ledger");
       setMobileActiveTab("LIST");
     } else {
-      const initialTab = hashToTab[window.location.hash];
-      if (initialTab) {
-        setMobileActiveTab(initialTab);
-      }
+      const initialTab = ({
+        "#ledger": "LIST",
+        "#airing": "CALENDAR",
+        "#discover": "DISCOVER",
+        "#releases": "RELEASES",
+        "#analytics": "STATS"
+      } as Record<string, MobileTab>)[window.location.hash];
+      if (initialTab) setMobileActiveTab(initialTab);
     }
 
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
-    };
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
-
-  // Synchronize modal search category selection with the currently active filter tab
-  useEffect(() => {
-    setSelectedMediaType(activeTab);
-  }, [activeTab]);
-
-  // Dynamic description auto-fetcher for items with missing synopses
-  useEffect(() => {
-    if (!selectedDetailsItem) return;
-
-    const detailsItem = mediaList.find(m => m.id === selectedDetailsItem.id) || selectedDetailsItem;
-
-    // If we already have a synopsis, no need to fetch
-    if (detailsItem.synopsis && detailsItem.synopsis !== "No synopsis available.") {
-      return;
-    }
-
-    // If we already fetched it in this session, use it
-    if (fetchedDescriptions[detailsItem.id]) {
-      return;
-    }
-
-    const fetchDescription = async () => {
-      setLoadingDescription(true);
-      try {
-        let description = "";
-
-        if (detailsItem.type === "ANIME" || detailsItem.type === "MANGA" || detailsItem.type === "LIGHT_NOVEL") {
-          const query = `
-            query ($search: String, $type: MediaType) {
-              Media (search: $search, type: $type) {
-                description
-              }
-            }
-          `;
-          const res = await fetch("https://graphql.anilist.co", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              query,
-              variables: {
-                search: detailsItem.title,
-                type: detailsItem.type === "ANIME" ? "ANIME" : "MANGA"
-              }
-            })
-          });
-          if (res.ok) {
-            const contentType = res.headers.get("content-type");
-            if (contentType && contentType.includes("application/json")) {
-              const json = await res.json();
-              description = json?.data?.Media?.description || "";
-            }
-          }
-        } else if (detailsItem.type === "TV_SHOW") {
-          const res = await fetch(`https://api.tvmaze.com/singlequery/shows?q=${encodeURIComponent(detailsItem.title)}`);
-          if (res.ok) {
-            const json = await res.json();
-            description = json?.summary || "";
-          }
-        } else if (detailsItem.type === "MOVIE") {
-          const res = await fetch(`https://imdb.iamidiotareyoutoo.com/search?q=${encodeURIComponent(detailsItem.title)}`);
-          if (res.ok) {
-            const json = await res.json();
-            const movie = json?.description?.[0];
-            if (movie) {
-              description = `Year: ${movie['#YEAR']}. Starring: ${movie['#ACTORS'] || 'N/A'}. AKA: ${movie['#AKA'] || 'N/A'}.`;
-            }
-          }
-        }
-
-        // Strip HTML tags from description if any
-        const cleanDesc = description ? description.replace(/<[^>]*>/g, "") : "No synopsis available.";
-
-        setFetchedDescriptions(prev => ({
-          ...prev,
-          [detailsItem.id]: cleanDesc
-        }));
-
-        // Update local media list state so it is visible in the modal and grid
-        setMediaList(prev => prev.map(m => {
-          if (m.id === detailsItem.id) {
-            return { ...m, synopsis: cleanDesc };
-          }
-          return m;
-        }));
-      } catch (err) {
-        console.warn("Failed to dynamically fetch media description (transient error):", err);
-      } finally {
-        setLoadingDescription(false);
-      }
-    };
-
-    fetchDescription();
-  }, [selectedDetailsItem, mediaList, fetchedDescriptions]);
-
-  const handleSaveSettings = (url: string) => {
-    const trimmed = url.trim();
-    if (trimmed) {
-      localStorage.setItem("UMT_API_URL", trimmed);
-    } else {
-      localStorage.removeItem("UMT_API_URL");
-    }
-    setIsSettingsOpen(false);
-    window.location.reload();
-  };
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      console.log(`User response to the install prompt: ${outcome}`);
+      console.log(`User response to install prompt: ${outcome}`);
       setDeferredPrompt(null);
       setIsInstallable(false);
     } else {
@@ -651,1138 +207,7 @@ export default function Home() {
     }
   };
 
-  const fetchWatchlist = () => {
-    if (!token) {
-      setIsLoadingWatchlist(false);
-      return;
-    }
-    setIsLoadingWatchlist(true);
-    fetch(`${getApiBaseUrl()}/api/watchlist`, {
-      headers: {
-        "Authorization": `Bearer ${token}`
-      }
-    })
-      .then((res) => {
-        if (res.status === 401 || res.status === 403) {
-          handleLogout();
-          return [];
-        }
-        return res.json();
-      })
-      .then(async (data) => {
-        if (Array.isArray(data)) {
-          setMediaList(data);
-
-          // Proactively fetch real-time airing schedules for ongoing anime/manga!
-          const ongoingAnimeOrManga = data.filter(
-            (item) => item.currentProgress < item.totalProgress && (item.type === "ANIME" || item.type === "MANGA" || item.type === "LIGHT_NOVEL")
-          );
-
-          if (ongoingAnimeOrManga.length > 0) {
-            const updatedItems = await Promise.all(
-              data.map(async (item) => {
-                if (item.currentProgress < item.totalProgress) {
-                  if (item.type === "ANIME") {
-                    try {
-                      const query = `
-                        query ($search: String) {
-                          Media (search: $search, type: ANIME) {
-                            nextAiringEpisode {
-                              airingAt
-                              timeUntilAiring
-                              episode
-                            }
-                          }
-                        }
-                      `;
-                      const res = await fetch("https://graphql.anilist.co", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          query,
-                          variables: { search: item.title }
-                        })
-                      });
-                      if (res.ok) {
-                        try {
-                          const contentType = res.headers.get("content-type");
-                          if (contentType && contentType.includes("application/json")) {
-                            const json = await res.json();
-                            const nextAiringEpisode = json?.data?.Media?.nextAiringEpisode;
-                            if (nextAiringEpisode) {
-                              return { ...item, nextAiringEpisode };
-                            }
-                          }
-                        } catch (jsonErr) {
-                          console.warn("JSON parse warning (rate limit/error HTML returned from AniList) for:", item.title);
-                        }
-                      }
-                    } catch (err) {
-                      console.warn("Failed to fetch live airing info for anime (transient error):", item.title);
-                    }
-                  } else if (item.type === "MANGA" || item.type === "LIGHT_NOVEL") {
-                    try {
-                      const res = await fetch(`${getApiBaseUrl()}/api/manga/airing?title=${encodeURIComponent(item.title)}`);
-                      if (res.ok) {
-                        const mangaData = await res.json();
-                        const updatedTotal = Math.max(item.totalProgress, Math.floor(mangaData.latestChapter));
-                        return {
-                          ...item,
-                          totalProgress: updatedTotal,
-                          nextAiringEpisode: mangaData.nextAiringEpisode
-                        };
-                      }
-                    } catch (err) {
-                      console.warn("Failed to fetch live airing info for manga (transient error):", item.title);
-                    }
-                  }
-                }
-                return item;
-              })
-            );
-            setMediaList(updatedItems);
-          }
-        }
-        setIsLoadingWatchlist(false);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch watchlist:", err);
-        setIsLoadingWatchlist(false);
-      });
-  };
-
-  useEffect(() => {
-    fetchWatchlist();
-
-    const handleFocus = () => {
-      fetchWatchlist();
-    };
-
-    window.addEventListener("focus", handleFocus);
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [token]);
-
-  const fetchReleases = async () => {
-    setIsLoadingReleases(true);
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/releases?timeframe=${releasesTimeframe}`);
-      if (res.ok) {
-        const data = await res.json();
-        setReleases(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch releases:", err);
-    } finally {
-      setIsLoadingReleases(false);
-    }
-  };
-
-  useEffect(() => {
-    if (mobileActiveTab === "RELEASES") {
-      fetchReleases();
-    }
-  }, [mobileActiveTab, releasesTimeframe]);
-
-  const filteredReleases = useMemo(() => {
-    const listToFilter: any[] = [];
-    if (!releases) return [];
-
-    if (selectedReleaseCategory === "ALL" || selectedReleaseCategory === "ANIME") {
-      listToFilter.push(...(releases.anime || []));
-    }
-    if (selectedReleaseCategory === "ALL" || selectedReleaseCategory === "TV_SHOW") {
-      listToFilter.push(...(releases.series || []));
-    }
-    if (selectedReleaseCategory === "ALL" || selectedReleaseCategory === "MOVIE") {
-      listToFilter.push(...(releases.movies || []));
-    }
-
-    return [...listToFilter].sort((a, b) => new Date(a.releaseDate).getTime() - new Date(b.releaseDate).getTime());
-  }, [releases, selectedReleaseCategory]);
-
-  const displayedReleases = useMemo(() => {
-    if (!releaseSearchQuery.trim()) return filteredReleases;
-    const query = releaseSearchQuery.toLowerCase().trim();
-    return filteredReleases.filter(item =>
-      (item.title && item.title.toLowerCase().includes(query)) ||
-      (item.synopsis && item.synopsis.toLowerCase().includes(query)) ||
-      (item.franchise && item.franchise.toLowerCase().includes(query))
-    );
-  }, [filteredReleases, releaseSearchQuery]);
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanEmail = emailInput.trim().toLowerCase();
-    if (!usernameInput || !cleanEmail || !passwordInput) {
-      setAuthError("All fields are required");
-      return;
-    }
-    setAuthError("");
-    setAuthLoading(true);
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: usernameInput, email: cleanEmail, password: passwordInput })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setAuthError(data.error || "Registration failed");
-        return;
-      }
-      localStorage.setItem("umt_token", data.token);
-      localStorage.setItem("umt_user", JSON.stringify(data.user));
-      setToken(data.token);
-      setUser(data.user);
-      trackEvent("sign_up", "authentication", data.user.username);
-      setUsernameInput("");
-      setEmailInput("");
-      setPasswordInput("");
-    } catch (err) {
-      setAuthError("Failed to connect to the server");
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanEmail = emailInput.trim().toLowerCase();
-    if (!cleanEmail || !passwordInput) {
-      setAuthError("Email and password are required");
-      return;
-    }
-    setAuthError("");
-    setAuthLoading(true);
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, password: passwordInput })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setAuthError(data.error || "Login failed");
-        return;
-      }
-      localStorage.setItem("umt_token", data.token);
-      localStorage.setItem("umt_user", JSON.stringify(data.user));
-      setToken(data.token);
-      setUser(data.user);
-      trackEvent("login", "authentication", data.user.username);
-      setEmailInput("");
-      setPasswordInput("");
-    } catch (err) {
-      setAuthError("Failed to connect to the server");
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanEmail = emailInput.trim().toLowerCase();
-    if (!cleanEmail) {
-      setAuthError("Email is required");
-      return;
-    }
-    setAuthError("");
-    setSuccessMessage("");
-    setAuthLoading(true);
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/auth/forgot-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setAuthError(data.error || "Failed to request OTP");
-        return;
-      }
-      setSuccessMessage(data.message || "Verification code sent successfully!");
-      setIsResettingPassword(true);
-    } catch (err) {
-      setAuthError("Failed to connect to the server");
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanEmail = emailInput.trim().toLowerCase();
-    if (!cleanEmail || !otpInput || !newPasswordInput) {
-      setAuthError("All fields are required");
-      return;
-    }
-    setAuthError("");
-    setSuccessMessage("");
-    setAuthLoading(true);
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/auth/reset-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, otp: otpInput, newPassword: newPasswordInput })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setAuthError(data.error || "Failed to reset password");
-        return;
-      }
-      localStorage.setItem("umt_token", data.token);
-      localStorage.setItem("umt_user", JSON.stringify(data.user));
-      setToken(data.token);
-      setUser(data.user);
-      setEmailInput("");
-      setOtpInput("");
-      setNewPasswordInput("");
-      setIsForgotPassword(false);
-      setIsResettingPassword(false);
-    } catch (err) {
-      setAuthError("Failed to connect to the server");
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("umt_token");
-    localStorage.removeItem("umt_user");
-    setToken(null);
-    setUser(null);
-    setMediaList([]);
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentPasswordInput || !changePasswordNewInput || !changePasswordConfirmInput) {
-      setChangePasswordError("All fields are required");
-      setChangePasswordSuccess("");
-      return;
-    }
-    if (changePasswordNewInput.length < 6) {
-      setChangePasswordError("New password must be at least 6 characters");
-      setChangePasswordSuccess("");
-      return;
-    }
-    if (changePasswordNewInput !== changePasswordConfirmInput) {
-      setChangePasswordError("New passwords do not match");
-      setChangePasswordSuccess("");
-      return;
-    }
-    setChangePasswordError("");
-    setChangePasswordSuccess("");
-    setChangePasswordLoading(true);
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/auth/change-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          currentPassword: currentPasswordInput,
-          newPassword: changePasswordNewInput
-        })
-      });
-      if (res.status === 401 || res.status === 403) {
-        handleLogout();
-        setIsChangePasswordOpen(false);
-        return;
-      }
-      const data = await res.json();
-      if (!res.ok) {
-        setChangePasswordError(data.error || "Failed to change password");
-        return;
-      }
-      setChangePasswordSuccess(data.message || "Password changed successfully!");
-      setCurrentPasswordInput("");
-      setChangePasswordNewInput("");
-      setChangePasswordConfirmInput("");
-    } catch (err) {
-      setChangePasswordError("Failed to connect to the server");
-    } finally {
-      setChangePasswordLoading(false);
-    }
-  };
-
-  const handleExportWatchlist = async () => {
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/watchlist/export`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        }
-      });
-      if (res.status === 401 || res.status === 403) {
-        handleLogout();
-        setIsImportExportOpen(false);
-        return;
-      }
-      if (!res.ok) {
-        throw new Error("Failed to export watchlist");
-      }
-      const data = await res.json();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `watchlist-export-${user?.username || "user"}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      trackEvent("export_watchlist", "data_transfer", user?.username);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to export watchlist. Please try again.");
-    }
-  };
-
-  const handleImportWatchlist = async (file: File) => {
-    if (!file) return;
-    setIsImporting(true);
-    setImportMessage(null);
-    setImportProgress({ current: 0, total: 0, percentage: 0 });
-    setIsMinimizedImport(false);
-    try {
-      const text = await file.text();
-      let parsed;
-      try {
-        parsed = JSON.parse(text);
-      } catch (parseErr) {
-        setImportMessage({ type: "error", text: "Invalid JSON format. Please upload a valid JSON file." });
-        setIsImporting(false);
-        setImportProgress(null);
-        return;
-      }
-
-      let isAnilist = false;
-      let itemsToImport: any[] = [];
-
-      if (Array.isArray(parsed)) {
-        itemsToImport = parsed;
-      } else if (parsed && typeof parsed === "object" && Array.isArray(parsed.lists)) {
-        itemsToImport = parsed.lists;
-        isAnilist = true;
-      } else {
-        setImportMessage({ type: "error", text: "Watchlist data must be a JSON array or a valid AniList export." });
-        setIsImporting(false);
-        setImportProgress(null);
-        return;
-      }
-
-      const totalItems = itemsToImport.length;
-      if (totalItems === 0) {
-        setImportMessage({ type: "success", text: "No items found to import." });
-        setIsImporting(false);
-        setImportProgress(null);
-        return;
-      }
-
-      setImportProgress({ current: 0, total: totalItems, percentage: 0 });
-
-      const chunkSize = 25;
-      let processedCount = 0;
-      let totalImported = 0;
-      let totalUpdated = 0;
-      let totalSkipped = 0;
-
-      for (let i = 0; i < totalItems; i += chunkSize) {
-        const chunk = itemsToImport.slice(i, i + chunkSize);
-        let payload: any = {};
-        if (isAnilist) {
-          payload = { anilistData: { lists: chunk } };
-        } else {
-          payload = { items: chunk };
-        }
-
-        try {
-          const res = await fetch(`${getApiBaseUrl()}/api/watchlist/import`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${token}`
-            },
-            body: JSON.stringify(payload)
-          });
-
-          if (res.status === 401 || res.status === 403) {
-            handleLogout();
-            setIsImportExportOpen(false);
-            return;
-          }
-          if (res.ok) {
-            const data = await res.json();
-            totalImported += data.imported ?? (data.count || chunk.length);
-            totalUpdated += data.updated ?? 0;
-            totalSkipped += data.skipped ?? 0;
-          }
-        } catch (err) {
-          console.error("Error importing chunk:", err);
-        }
-
-        processedCount += chunk.length;
-        const percentage = Math.min(100, Math.round((processedCount / totalItems) * 100));
-        setImportProgress({ current: processedCount, total: totalItems, percentage });
-      }
-
-      trackEvent("import_watchlist", "data_transfer", `Imported ${totalImported} items`, totalImported);
-      setImportMessage({
-        type: "success",
-        text: `Watchlist imported successfully! Added ${totalImported} new, updated ${totalUpdated}, and skipped ${totalSkipped} duplicates.`
-      });
-      fetchWatchlist();
-    } catch (err) {
-      setImportMessage({ type: "error", text: "An error occurred during import. Please try again." });
-    } finally {
-      setIsImporting(false);
-      // Automatically dismiss the progress bar after 5 seconds
-      setTimeout(() => {
-        setImportProgress(null);
-      }, 5000);
-    }
-  };
-
-  // Calculate watch and read hours
-  const calculateAnalytics = () => {
-    let watchMinutes = 0;
-    let readMinutes = 0;
-    let completedCount = 0;
-
-    mediaList.forEach((item) => {
-      const progress = item.currentProgress || 0;
-      if (progress === item.totalProgress) {
-        completedCount++;
-      }
-      if (item.type === "ANIME") {
-        watchMinutes += progress * 24;
-      } else if (item.type === "TV_SHOW") {
-        watchMinutes += progress * 45;
-      } else if (item.type === "MOVIE") {
-        watchMinutes += progress * 120;
-      } else if (item.type === "MANGA" || item.type === "LIGHT_NOVEL") {
-        readMinutes += progress * 10;
-      }
-    });
-
-    const watchHours = parseFloat((watchMinutes / 60).toFixed(1));
-    const readHours = parseFloat((readMinutes / 60).toFixed(1));
-
-    return { watchHours, readHours, completedCount };
-  };
-
-  const { watchHours: totalWatchHours, readHours: totalReadHours, completedCount } = calculateAnalytics();
-
-  // Fetch backend server health check on startup
-  useEffect(() => {
-    fetch(`${getApiBaseUrl()}/health`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.database === "connected") {
-          setDbConnected(true);
-        }
-      })
-      .catch(() => {
-        setDbConnected(false);
-      });
-  }, []);
-
-  // Compute dynamic Airing Calendar based on user added watchlist media (no static or fallback data)
-  useEffect(() => {
-    const calendarEntries: { id: string; title: string; schedule: AiringSchedule }[] = [];
-
-    mediaList.forEach((item) => {
-      // Show calendar only for ongoing/uncompleted items with a live upcoming airing episode
-      if (item.currentProgress < item.totalProgress && item.nextAiringEpisode) {
-        const date = new Date(item.nextAiringEpisode.airingAt * 1000);
-        const timeLabel = date.toLocaleDateString([], { weekday: 'short' }) + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-
-        const daysLeft = Math.ceil(item.nextAiringEpisode.timeUntilAiring / 3600 / 24);
-        const noun = (item.type === "ANIME" || item.type === "TV_SHOW") ? "Episode" : "Chapter";
-        const actionVerb = (item.type === "ANIME" || item.type === "TV_SHOW") ? "airs" : "releases";
-        const actionGerund = (item.type === "ANIME" || item.type === "TV_SHOW") ? "airing" : "releasing";
-
-        let details = `${noun} ${item.nextAiringEpisode.episode} ${actionVerb} in ${daysLeft} days`;
-        if (daysLeft <= 0) {
-          details = `${noun} ${item.nextAiringEpisode.episode} is ${actionGerund} now/soon!`;
-        } else if (daysLeft === 1) {
-          details = `${noun} ${item.nextAiringEpisode.episode} ${actionVerb} tomorrow!`;
-        }
-
-        calendarEntries.push({
-          id: item.id,
-          title: item.title,
-          schedule: {
-            timeLabel,
-            details
-          }
-        });
-      }
-    });
-
-    setAiringCalendar(calendarEntries);
-  }, [mediaList]);
-
-  // Update modal search results dynamically from online sources (AniList & Express backend)
-  useEffect(() => {
-    if (!modalSearchQuery) {
-      setSearchResults([]);
-      return;
-    }
-
-    setIsLoadingSearch(true);
-
-    const delayDebounceFn = setTimeout(async () => {
-      try {
-        let finalResults: SearchResult[] = [];
-
-        // 1. Fetch Anime & Manga from AniList API (Public GraphQL)
-        if (selectedMediaType === "ALL" || selectedMediaType === "ANIME" || selectedMediaType === "MANGA") {
-          const aniListType = selectedMediaType === "ALL"
-            ? null
-            : (selectedMediaType === "ANIME" ? "ANIME" : "MANGA");
-
-          const graphQLQuery = `
-            query ($search: String, $type: MediaType) {
-              Page (page: 1, perPage: 6) {
-                media (search: $search, type: $type) {
-                  id
-                  type
-                  title {
-                    romaji
-                    english
-                  }
-                  description
-                  coverImage {
-                    large
-                  }
-                  chapters
-                  episodes
-                  nextAiringEpisode {
-                    airingAt
-                    timeUntilAiring
-                    episode
-                  }
-                }
-              }
-            }
-          `;
-
-          const variables: any = { search: modalSearchQuery };
-          if (aniListType) {
-            variables.type = aniListType;
-          }
-
-          const response = await fetch("https://graphql.anilist.co", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            body: JSON.stringify({
-              query: graphQLQuery,
-              variables,
-            }),
-          });
-
-          let mappedAniList: any[] = [];
-          if (response.ok) {
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.includes("application/json")) {
-              const resData = await response.json();
-              const aniListResults = resData?.data?.Page?.media || [];
-              mappedAniList = aniListResults.map((item: any) => ({
-                id: `anilist-${item.id}`,
-                type: item.type === "ANIME" ? "ANIME" : "MANGA",
-                title: item.title.english || item.title.romaji || "Unknown Title",
-                franchise: `${item.title.romaji || item.title.english} Franchise`,
-                coverImage: item.coverImage.large || "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=500&auto=format&fit=crop&q=60",
-                synopsis: item.description ? item.description.replace(/<[^>]*>/g, "") : "No synopsis available.",
-                totalProgress: item.type === "ANIME" ? (item.episodes || 12) : (item.chapters || 150),
-                progressType: item.type === "ANIME" ? "episode" : "chapter",
-                nextAiringEpisode: item.nextAiringEpisode,
-              }));
-            }
-          }
-
-          finalResults = [...finalResults, ...mappedAniList];
-        }
-
-        // 2. Fetch Live Action TV/Movies from our Express search backend (which connects to TMDB)
-        if (selectedMediaType === "ALL" || selectedMediaType === "TV_SHOW" || selectedMediaType === "MOVIE") {
-          const expressType = selectedMediaType === "ALL"
-            ? "ALL"
-            : selectedMediaType;
-
-          const expressUrl = `${getApiBaseUrl()}/api/search?q=${encodeURIComponent(modalSearchQuery)}&type=${expressType}`;
-          const response = await fetch(expressUrl);
-          if (response.ok) {
-            const expressData = await response.json();
-            finalResults = [...finalResults, ...expressData];
-          }
-        }
-
-        // Strict type filter to guarantee absolute isolation (e.g. no Manga returned when ANIME is selected)
-        if (selectedMediaType !== "ALL") {
-          finalResults = finalResults.filter(item => {
-            if (selectedMediaType === "ANIME") return item.type === "ANIME";
-            if (selectedMediaType === "MANGA") return item.type === "MANGA";
-            if (selectedMediaType === "TV_SHOW") return item.type === "TV_SHOW";
-            if (selectedMediaType === "MOVIE") return item.type === "MOVIE";
-            return true;
-          });
-        }
-
-
-
-        setSearchResults(finalResults);
-      } catch (error) {
-        console.warn("Error searching online sources (transient error):", error);
-      } finally {
-        setIsLoadingSearch(false);
-      }
-    }, 500); // 500ms debounce to prevent hitting rate limits while typing
-
-    return () => clearTimeout(delayDebounceFn);
-  }, [modalSearchQuery, selectedMediaType]);
-
-  // Simulates standard instant Webhook / API fast progress tracker increments
-  const handleIncrement = (id: string, event?: React.MouseEvent) => {
-    if (event) event.stopPropagation();
-
-    setMediaList((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          if (item.currentProgress < item.totalProgress) {
-            const nextProgress = item.currentProgress + 1;
-
-            if (token) {
-              fetch(`${getApiBaseUrl()}/api/watchlist/update`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                  progressId: id,
-                  type: "increment"
-                })
-              })
-                .then((res) => {
-                  if (res.status === 401 || res.status === 403) {
-                    handleLogout();
-                  }
-                })
-                .catch((err) => console.error("Failed to sync progress increment:", err));
-            }
-
-            trackEvent("increment_progress", "media", item.title, nextProgress);
-            setNotificationMsg(`Updated ${item.title} to ${item.progressType} ${nextProgress}!`);
-            setShowNotification(true);
-            setTimeout(() => setShowNotification(false), 3000);
-
-            return {
-              ...item,
-              currentProgress: nextProgress,
-              lastUpdated: "Just now"
-            };
-          }
-        }
-        return item;
-      })
-    );
-  };
-
-  // Quick Action: Catch Up to Latest (One-click complete)
-  const handleCatchUp = (id: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-
-    setMediaList((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          if (token) {
-            fetch(`${getApiBaseUrl()}/api/watchlist/update`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-              },
-              body: JSON.stringify({
-                progressId: id,
-                type: "catchup"
-              })
-            })
-              .then((res) => {
-                if (res.status === 401 || res.status === 403) {
-                  handleLogout();
-                }
-              })
-              .catch((err) => console.error("Failed to sync progress catchup:", err));
-          }
-
-          trackEvent("catchup_progress", "media", item.title, item.totalProgress);
-          setNotificationMsg(`Caught up "${item.title}" completely to ${item.progressType} ${item.totalProgress}!`);
-          setShowNotification(true);
-          setTimeout(() => setShowNotification(false), 3000);
-
-          return {
-            ...item,
-            currentProgress: item.totalProgress,
-            lastUpdated: "Caught up just now"
-          };
-        }
-        return item;
-      })
-    );
-  };
-
-  // Custom progress input save
-  const handleSaveCustomProgress = (id: string, total: number, progressType: string) => {
-    const val = parseInt(customValue, 10);
-    if (isNaN(val) || val < 0 || val > total) {
-      setNotificationMsg(`Invalid entry! Please enter a value between 0 and ${total}.`);
-      setShowNotification(true);
-      setTimeout(() => setShowNotification(false), 3000);
-      return;
-    }
-
-    setMediaList((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          if (token) {
-            fetch(`${getApiBaseUrl()}/api/watchlist/update`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-              },
-              body: JSON.stringify({
-                progressId: id,
-                type: "custom",
-                customValue: val.toString()
-              })
-            })
-              .then((res) => {
-                if (res.status === 401 || res.status === 403) {
-                  handleLogout();
-                }
-              })
-              .catch((err) => console.error("Failed to sync custom progress:", err));
-          }
-
-          trackEvent("custom_progress", "media", item.title, val);
-          setNotificationMsg(`Set "${item.title}" to ${progressType} ${val}!`);
-          setShowNotification(true);
-          setTimeout(() => setShowNotification(false), 3000);
-
-          return {
-            ...item,
-            currentProgress: val,
-            lastUpdated: "Manually adjusted just now"
-          };
-        }
-        return item;
-      })
-    );
-
-    setEditingId(null);
-    setCustomValue("");
-  };
-
-  // Resets tracking values for demo interactivity
-  const handleReset = (id: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    setMediaList((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          if (token) {
-            fetch(`${getApiBaseUrl()}/api/watchlist/update`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-              },
-              body: JSON.stringify({
-                progressId: id,
-                type: "reset"
-              })
-            })
-              .then((res) => {
-                if (res.status === 401 || res.status === 403) {
-                  handleLogout();
-                }
-              })
-              .catch((err) => console.error("Failed to sync progress reset:", err));
-          }
-
-          trackEvent("reset_progress", "media", item.title, 0);
-          return { ...item, currentProgress: 0, lastUpdated: "Just now" };
-        }
-        return item;
-      })
-    );
-  };
-
-  const handleDeleteMedia = async (id: string) => {
-    if (!token) return;
-    if (!window.confirm("Are you sure you want to delete this media from your watchlist?")) return;
-
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/watchlist/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      if (res.status === 401 || res.status === 403) {
-        handleLogout();
-        return;
-      }
-      if (res.ok) {
-        setMediaList((prev) => prev.filter((item) => item.id !== id));
-        setSelectedDetailsItem(null);
-        setNotificationMsg("Media removed from watchlist");
-        setShowNotification(true);
-        setTimeout(() => setShowNotification(false), 3000);
-      } else {
-        const err = await res.json();
-        setNotificationMsg(err.error || "Failed to delete media");
-        setShowNotification(true);
-        setTimeout(() => setShowNotification(false), 3000);
-      }
-    } catch (err) {
-      console.error("Failed to delete media:", err);
-      setNotificationMsg("Failed to delete media");
-      setShowNotification(true);
-      setTimeout(() => setShowNotification(false), 3000);
-    }
-  };
-
-  // Adds a searched item from AniList / TMDB catalogs to the ledger
-  const handleAddMedia = (result: SearchResult) => {
-    if (mediaList.some((item) => item.title.toLowerCase() === result.title.toLowerCase() && item.type === result.type)) {
-      setNotificationMsg(`"${result.title}" is already in your tracking ledger!`);
-      setShowNotification(true);
-      setTimeout(() => setShowNotification(false), 3000);
-      return;
-    }
-
-    const tempId = `temp-${Date.now()}`;
-    const newItem: MediaItem = {
-      id: tempId,
-      type: result.type,
-      title: result.title,
-      franchise: result.franchise,
-      coverImage: result.coverImage,
-      status: "Releasing",
-      currentProgress: 0,
-      totalProgress: result.totalProgress,
-      progressType: result.progressType,
-      lastUpdated: "Added just now",
-      nextAiringEpisode: result.nextAiringEpisode
-    };
-
-    // Add to state immediately
-    setMediaList((prev) => [newItem, ...prev]);
-    setNotificationMsg(`Added "${result.title}" instantly to your ledger!`);
-    setShowNotification(true);
-    setTimeout(() => setShowNotification(false), 3000);
-
-    if (token) {
-      fetch(`${getApiBaseUrl()}/api/watchlist/add`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title: result.title,
-          type: result.type,
-          coverImage: result.coverImage,
-          synopsis: result.synopsis,
-          totalProgress: result.totalProgress,
-          progressType: result.progressType,
-          franchise: result.franchise,
-          externalId: result.id
-        })
-      })
-        .then((res) => {
-          if (res.status === 401 || res.status === 403) {
-            handleLogout();
-            throw new Error("Session expired, logging out...");
-          }
-          if (!res.ok) throw new Error("Failed to add to database");
-          return res.json();
-        })
-        .then((data) => {
-          // Replace tempId with actual DB progressId and resolved totalProgress
-          if (data.progressId) {
-            trackEvent("add_to_watchlist", "media", result.title, result.totalProgress);
-            setMediaList((prev) =>
-              prev.map((item) =>
-                item.id === tempId
-                  ? { ...item, id: data.progressId, totalProgress: data.totalProgress || item.totalProgress }
-                  : item
-              )
-            );
-          }
-        })
-        .catch((err) => {
-          console.error("Failed to add to DB:", err);
-          // Rollback: remove the temp item
-          setMediaList((prev) => prev.filter((item) => item.id !== tempId));
-          setNotificationMsg(`Error: Failed to save "${result.title}" to database.`);
-          setShowNotification(true);
-          setTimeout(() => setShowNotification(false), 3000);
-        });
-    }
-  };
-
-  const renderLoader = (isFullScreen: boolean) => {
-    const loader = LOADERS_DATA[loaderIndex] || LOADERS_DATA[0];
-
-    const loaderContent = (
-      <div className="flex flex-col items-center justify-center text-center gap-5">
-        <style>{`
-          @keyframes magicalWand {
-            0%, 100% { transform: translateY(0) rotate(-5deg); }
-            50% { transform: translateY(-10px) rotate(5deg); }
-          }
-          @keyframes sparkFloat1 {
-            0% { transform: translateY(10px) translateX(0) scale(0.5); opacity: 0; }
-            50% { opacity: 0.8; }
-            100% { transform: translateY(-30px) translateX(-15px) scale(1.2); opacity: 0; }
-          }
-          @keyframes sparkFloat2 {
-            0% { transform: translateY(10px) translateX(0) scale(0.5); opacity: 0; }
-            50% { opacity: 0.8; }
-            100% { transform: translateY(-35px) translateX(15px) scale(1); opacity: 0; }
-          }
-          @keyframes shinobiRun {
-            0%, 100% { transform: skewX(-20deg) translateY(0); }
-            50% { transform: skewX(-22deg) translateY(-4px); }
-          }
-          @keyframes speedLine {
-            0% { transform: translateX(50px) scaleX(0.1); opacity: 0; }
-            10%, 80% { opacity: 0.6; }
-            100% { transform: translateX(-80px) scaleX(1.5); opacity: 0; }
-          }
-          @keyframes kiPulse {
-            0%, 100% { transform: scale(1); box-shadow: 0 0 15px 2px rgba(255,46,67,0.3); }
-            50% { transform: scale(1.15); box-shadow: 0 0 35px 8px rgba(255,46,67,0.6); }
-          }
-          @keyframes sparkSwirl {
-            0% { transform: rotate(0deg) scale(1) translate(0, 0); opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { transform: rotate(360deg) scale(0.2) translate(-10px, -10px); opacity: 0; }
-          }
-          @keyframes sleepBreath {
-            0%, 100% { transform: scaleY(1) scaleX(1); }
-            50% { transform: scaleY(1.05) scaleX(1.02); }
-          }
-          @keyframes zzzFloat {
-            0% { transform: translate(15px, 0) scale(0.6); opacity: 0; }
-            50% { opacity: 0.8; }
-            100% { transform: translate(30px, -40px) scale(1.2); opacity: 0; }
-          }
-          @keyframes sushiSlide {
-            0% { transform: translateX(-80px) rotate(0deg); }
-            40% { transform: translateX(-10px) rotate(0deg); }
-            50% { transform: translateX(0px) translateY(-20px) rotate(180deg); }
-            60% { transform: translateX(10px) translateY(-20px) rotate(360deg); }
-            70% { transform: translateX(20px) translateY(0deg) rotate(360deg); }
-            100% { transform: translateX(80px) rotate(360deg); }
-          }
-          .animate-magicalwand { animation: magicalWand 2s infinite ease-in-out; }
-          .animate-shinobirun { animation: shinobiRun 0.5s infinite ease-in-out; }
-          .animate-kipulse { animation: kiPulse 1s infinite ease-in-out; }
-          .animate-sleepbreath { animation: sleepBreath 3s infinite ease-in-out; }
-          .animate-sushislide { animation: sushiSlide 2.5s infinite linear; }
-        `}</style>
-
-        {/* Dynamic Animated Mascot */}
-        <div className="relative flex items-center justify-center min-h-[72px] w-full">
-          {loaderIndex === 0 && (
-            <div className="relative w-24 h-20 flex items-center justify-center">
-              <div className="text-5xl animate-magicalwand select-none">🪄</div>
-              <div className="absolute text-lg select-none pointer-events-none" style={{ animation: "sparkFloat1 1.5s infinite ease-out", left: "20%", top: "30%" }}>💖</div>
-              <div className="absolute text-sm select-none pointer-events-none" style={{ animation: "sparkFloat2 1.8s infinite ease-out", right: "20%", top: "20%" }}>✨</div>
-              <div className="absolute text-xs select-none pointer-events-none" style={{ animation: "sparkFloat1 1.2s infinite ease-out", right: "30%", top: "50%" }}>⭐</div>
-            </div>
-          )}
-          {loaderIndex === 1 && (
-            <div className="relative w-28 h-20 flex flex-col items-center justify-center overflow-hidden">
-              <div className="text-5xl select-none" style={{ animation: "shinobiRun 0.5s infinite ease-in-out", transformOrigin: "bottom center" }}>🥷</div>
-              <div className="absolute h-0.5 bg-slate-500 rounded-full" style={{ width: "30px", animation: "speedLine 0.5s infinite linear", top: "30%", right: "10%" }} />
-              <div className="absolute h-0.5 bg-[#ff2e43]/40 rounded-full" style={{ width: "45px", animation: "speedLine 0.7s infinite linear", top: "50%", right: "5%", animationDelay: "0.2s" }} />
-              <div className="absolute h-0.5 bg-slate-500 rounded-full" style={{ width: "25px", animation: "speedLine 0.4s infinite linear", top: "70%", right: "15%", animationDelay: "0.1s" }} />
-            </div>
-          )}
-          {loaderIndex === 2 && (
-            <div className="relative w-24 h-20 flex items-center justify-center">
-              <div className="w-10 h-10 bg-[#ff2e43] rounded-full flex items-center justify-center shadow-lg animate-kipulse">
-                <span className="text-white text-xs select-none font-black">⚡</span>
-              </div>
-              <div className="absolute w-20 h-20 border border-[#ff2e43]/20 rounded-full" style={{ animation: "spin 2s infinite linear" }} />
-              <div className="absolute text-sm select-none" style={{ animation: "sparkSwirl 1.5s infinite ease-in-out", transformOrigin: "40px 40px" }}>🔥</div>
-              <div className="absolute text-xs select-none" style={{ animation: "sparkSwirl 1.2s infinite ease-in-out", animationDelay: "0.4s", transformOrigin: "35px 35px" }}>⚡</div>
-            </div>
-          )}
-          {loaderIndex === 3 && (
-            <div className="relative w-24 h-20 flex flex-col items-center justify-center">
-              <div className="text-5xl select-none animate-sleepbreath" style={{ transformOrigin: "bottom center" }}>🐼</div>
-              <div className="absolute text-sm select-none" style={{ top: "10%", left: "45%", animation: "magicalWand 3s infinite ease-in-out" }}>🍃</div>
-              <div className="absolute text-xs font-bold text-indigo-400 select-none" style={{ animation: "zzzFloat 2s infinite ease-out" }}>💤</div>
-              <div className="absolute text-[10px] font-bold text-indigo-300 select-none" style={{ animation: "zzzFloat 2s infinite ease-out", animationDelay: "0.8s" }}>💤</div>
-            </div>
-          )}
-          {loaderIndex === 4 && (
-            <div className="relative w-40 h-20 flex flex-col items-center justify-end overflow-hidden pb-1">
-              <div className="text-4xl select-none absolute animate-sushislide" style={{ bottom: "12px" }}>🍣</div>
-              <div className="w-32 h-0.5 bg-[#1f212a] rounded-full flex justify-between px-6">
-                <span className="text-slate-655 text-[10px] select-none -translate-y-2">🥢</span>
-                <span className="text-slate-655 text-[10px] select-none -translate-y-2">🥢</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Text Guidelines */}
-        <div className="space-y-1.5 max-w-xs">
-          <h3 className="text-xs font-black uppercase tracking-widest text-[#ff2e43] animate-pulse">
-            {loader.text}
-          </h3>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider leading-relaxed animate-pulse">
-            {loader.subtext}
-          </p>
-        </div>
-      </div>
-    );
-
-    if (isFullScreen) {
-      return (
-        <div className="min-h-screen bg-[#050608] text-[#f3f4f6] flex flex-col items-center justify-center font-sans gap-6 p-4">
-          <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-[#ff2e43]/5 rounded-full blur-[140px] pointer-events-none" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-500/5 rounded-full blur-[140px] pointer-events-none" />
-          <div className="bg-[#0f1015]/85 border border-[#1f212a] rounded-3xl p-8 sm:p-10 shadow-2xl backdrop-blur-2xl max-w-sm w-full animate-in fade-in zoom-in-95 duration-300">
-            {loaderContent}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="bg-[#0f1015]/40 border border-[#1f212a] rounded-3xl p-16 text-center flex flex-col items-center justify-center gap-6 min-h-[350px] animate-in fade-in duration-300">
-        {loaderContent}
-      </div>
-    );
-  };
-
+  // Filtered media calculation
   const filteredMedia = mediaList.filter((item) => {
     const matchesSearch =
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1790,7 +215,6 @@ export default function Home() {
 
     if (!matchesSearch) return false;
 
-    // 1. Filter by category (activeTab)
     let matchesType = true;
     if (activeTab === "ANIME") matchesType = item.type === "ANIME";
     else if (activeTab === "MANGA") matchesType = item.type === "MANGA" || item.type === "LIGHT_NOVEL";
@@ -1799,7 +223,6 @@ export default function Home() {
 
     if (!matchesType) return false;
 
-    // 2. Filter by progress status (statusFilter)
     const isCompleted = item.currentProgress === item.totalProgress;
     if (statusFilter === "ONGOING") return !isCompleted;
     if (statusFilter === "COMPLETED") return isCompleted;
@@ -1807,1429 +230,214 @@ export default function Home() {
     return true;
   });
 
-  // Derived in-progress items for "Up Next" horizontal bar
   const inProgressMedia = mediaList.filter(
     (item) => item.currentProgress > 0 && item.currentProgress < item.totalProgress
   );
 
   if (!isMounted) {
-    return renderLoader(true);
+    return <Loader loaderIndex={loaderIndex} isFullScreen />;
   }
 
-  // Define unified style overrides targeting all crimson accents, buttons, inputs, logos, and scrolls
+  const currentTheme = THEMES[activeTheme] || THEMES["sunset-crimson"];
   const dynamicStyles = `
     :root {
-      --background: ${THEMES[activeTheme].background};
-      --foreground: ${THEMES[activeTheme].foreground};
-      --color-card-bg: ${THEMES[activeTheme].cardBg};
-      --color-card-border: ${THEMES[activeTheme].cardBorder};
-      --color-accent-red: ${THEMES[activeTheme].accent};
+      --background: ${currentTheme.background};
+      --foreground: ${currentTheme.foreground};
+      --color-card-bg: ${currentTheme.cardBg};
+      --color-card-border: ${currentTheme.cardBorder};
+      --color-accent-red: ${currentTheme.accent};
     }
     
     .bg-\\[\\#050608\\] { background-color: var(--background) !important; }
     .bg-\\[\\#0f1015\\] { background-color: var(--color-card-bg) !important; }
-    .bg-\\[\\#0f1015\\]\\/80 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.8) !important; }
-    .bg-\\[\\#0f1015\\]\\/50 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.5) !important; }
-    .bg-\\[\\#0f1015\\]\\/40 { background-color: rgba(${THEMES[activeTheme].cardBgRgb}, 0.4) !important; }
+    .bg-\\[\\#0f1015\\]\\/80 { background-color: rgba(${currentTheme.cardBgRgb}, 0.8) !important; }
+    .bg-\\[\\#0f1015\\]\\/50 { background-color: rgba(${currentTheme.cardBgRgb}, 0.5) !important; }
+    .bg-\\[\\#0f1015\\]\\/40 { background-color: rgba(${currentTheme.cardBgRgb}, 0.4) !important; }
     
     .border-\\[\\#1f212a\\] { border-color: var(--color-card-border) !important; }
-    .border-\\[\\#1f212a\\]\\/50 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.5) !important; }
-    .border-\\[\\#1f212a\\]\\/30 { border-color: rgba(${THEMES[activeTheme].cardBorderRgb}, 0.3) !important; }
+    .border-\\[\\#1f212a\\]\\/50 { border-color: rgba(${currentTheme.cardBorderRgb}, 0.5) !important; }
+    .border-\\[\\#1f212a\\]\\/30 { border-color: rgba(${currentTheme.cardBorderRgb}, 0.3) !important; }
     
     .hover\\:bg-\\[\\#1f212a\\]:hover { background-color: var(--color-card-border) !important; }
-    .hover\\:bg-\\[\\#2b2e3b\\]:hover { background-color: ${THEMES[activeTheme].hoverBg} !important; }
+    .hover\\:bg-\\[\\#2b2e3b\\]:hover { background-color: ${currentTheme.hoverBg} !important; }
     
     .bg-\\[\\#ff2e43\\] { background-color: var(--color-accent-red) !important; }
-    .bg-\\[\\#ff2e43\\]\\/5 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.05) !important; }
-    .bg-\\[\\#ff2e43\\]\\/10 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
-    .bg-\\[\\#ff2e43\\]\\/15 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
-    .bg-\\[\\#ff2e43\\]\\/20 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
-    .bg-\\[\\#ff2e43\\]\\/25 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-    .bg-\\[\\#ff2e43\\]\\/30 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-    .bg-\\[\\#ff2e43\\]\\/40 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.4) !important; }
-    .bg-\\[\\#ff2e43\\]\\/50 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
-    .hover\\:bg-\\[\\#ff2e43\\]\\/10:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
-    .hover\\:bg-\\[\\#ff2e43\\]\\/20:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    .bg-\\[\\#ff2e43\\]\\/5 { background-color: rgba(${currentTheme.accentRgb}, 0.05) !important; }
+    .bg-\\[\\#ff2e43\\]\\/10 { background-color: rgba(${currentTheme.accentRgb}, 0.1) !important; }
+    .bg-\\[\\#ff2e43\\]\\/15 { background-color: rgba(${currentTheme.accentRgb}, 0.15) !important; }
+    .bg-\\[\\#ff2e43\\]\\/20 { background-color: rgba(${currentTheme.accentRgb}, 0.2) !important; }
+    .bg-\\[\\#ff2e43\\]\\/25 { background-color: rgba(${currentTheme.accentRgb}, 0.25) !important; }
+    .bg-\\[\\#ff2e43\\]\\/30 { background-color: rgba(${currentTheme.accentRgb}, 0.3) !important; }
+    .bg-\\[\\#ff2e43\\]\\/40 { background-color: rgba(${currentTheme.accentRgb}, 0.4) !important; }
+    .bg-\\[\\#ff2e43\\]\\/50 { background-color: rgba(${currentTheme.accentRgb}, 0.5) !important; }
+    .hover\\:bg-\\[\\#ff2e43\\]\\/10:hover { background-color: rgba(${currentTheme.accentRgb}, 0.1) !important; }
+    .hover\\:bg-\\[\\#ff2e43\\]\\/20:hover { background-color: rgba(${currentTheme.accentRgb}, 0.2) !important; }
     
     .text-\\[\\#ff2e43\\] { color: var(--color-accent-red) !important; }
     .hover\\:text-\\[\\#ff2e43\\]:hover { color: var(--color-accent-red) !important; }
     .group:hover .group-hover\\:text-\\[\\#ff2e43\\] { color: var(--color-accent-red) !important; }
     
-    .border-\\[\\#ff2e43\\]\\/20 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
-    .border-\\[\\#ff2e43\\]\\/25 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-    .border-\\[\\#ff2e43\\]\\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-    .border-\\[\\#ff2e43\\]\\/40 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.4) !important; }
-    .border-\\[\\#ff2e43\\]\\/50 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    .border-\\[\\#ff2e43\\]\\/20 { border-color: rgba(${currentTheme.accentRgb}, 0.2) !important; }
+    .border-\\[\\#ff2e43\\]\\/25 { border-color: rgba(${currentTheme.accentRgb}, 0.25) !important; }
+    .border-\\[\\#ff2e43\\]\\/30 { border-color: rgba(${currentTheme.accentRgb}, 0.3) !important; }
+    .border-\\[\\#ff2e43\\]\\/40 { border-color: rgba(${currentTheme.accentRgb}, 0.4) !important; }
+    .border-\\[\\#ff2e43\\]\\/50 { border-color: rgba(${currentTheme.accentRgb}, 0.5) !important; }
     
-    .hover\\:border-\\[\\#ff2e43\\]\\/20:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
-    .hover\\:border-\\[\\#ff2e43\\]\\/25:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-    .hover\\:border-\\[\\#ff2e43\\]\\/30:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-    .hover\\:border-\\[\\#ff2e43\\]\\/50:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
-    .focus\\:border-\\[\\#ff2e43\\]\\/50:focus { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    .hover\\:border-\\[\\#ff2e43\\]\\/20:hover { border-color: rgba(${currentTheme.accentRgb}, 0.2) !important; }
+    .hover\\:border-\\[\\#ff2e43\\]\\/25:hover { border-color: rgba(${currentTheme.accentRgb}, 0.25) !important; }
+    .hover\\:border-\\[\\#ff2e43\\]\\/30:hover { border-color: rgba(${currentTheme.accentRgb}, 0.3) !important; }
+    .hover\\:border-\\[\\#ff2e43\\]\\/50:hover { border-color: rgba(${currentTheme.accentRgb}, 0.5) !important; }
+    .focus\\:border-\\[\\#ff2e43\\]\\/50:focus { border-color: rgba(${currentTheme.accentRgb}, 0.5) !important; }
     
-    .shadow-\\[\\#ff2e43\\]\\/5 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.05) !important; }
-    .shadow-\\[\\#ff2e43\\]\\/10 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
-    .shadow-\\[\\#ff2e43\\]\\/15 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.15) !important; }
-    .shadow-\\[\\#ff2e43\\]\\/20 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
-    .shadow-\\[\\--tw-shadow-color] { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-    .shadow-\\[\\#ff2e43\\]\\/25 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.25) !important; }
-    .shadow-\\[\\#ff2e43\\]\\/30 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-    .shadow-\\[\\#ff2e43\\]\\/50 { --tw-shadow-color: rgba(${THEMES[activeTheme].accentRgb}, 0.5) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/5 { --tw-shadow-color: rgba(${currentTheme.accentRgb}, 0.05) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/10 { --tw-shadow-color: rgba(${currentTheme.accentRgb}, 0.1) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/15 { --tw-shadow-color: rgba(${currentTheme.accentRgb}, 0.15) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/20 { --tw-shadow-color: rgba(${currentTheme.accentRgb}, 0.2) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/25 { --tw-shadow-color: rgba(${currentTheme.accentRgb}, 0.25) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/30 { --tw-shadow-color: rgba(${currentTheme.accentRgb}, 0.3) !important; }
+    .shadow-\\[\\#ff2e43\\]\\/50 { --tw-shadow-color: rgba(${currentTheme.accentRgb}, 0.5) !important; }
     
-    .hover\\:bg-\\[\\#e02034\\]:hover { background-color: ${THEMES[activeTheme].accentHover} !important; }
+    .hover\\:bg-\\[\\#e02034\\]:hover { background-color: ${currentTheme.accentHover} !important; }
     .selection\\:bg-\\[\\#ff2e43\\]::selection { background-color: var(--color-accent-red) !important; }
     
-    .bg-red-950\\/20 { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.08) !important; }
-    .border-red-900\\/30 { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.3) !important; }
-    .hover\\:bg-\\[\\#ff2e43\\]\\/10:hover { background-color: rgba(${THEMES[activeTheme].accentRgb}, 0.1) !important; }
-    .hover\\:border-red-950:hover { border-color: rgba(${THEMES[activeTheme].accentRgb}, 0.2) !important; }
+    .bg-red-950\\/20 { background-color: rgba(${currentTheme.accentRgb}, 0.08) !important; }
+    .border-red-900\\/30 { border-color: rgba(${currentTheme.accentRgb}, 0.3) !important; }
+    .hover\\:bg-\\[\\#ff2e43\\]\\/10:hover { background-color: rgba(${currentTheme.accentRgb}, 0.1) !important; }
+    .hover\\:border-red-955:hover { border-color: rgba(${currentTheme.accentRgb}, 0.2) !important; }
     ::-webkit-scrollbar-thumb {
       background: var(--color-card-border) !important;
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: ${THEMES[activeTheme].hoverBg} !important;
+      background: ${currentTheme.hoverBg} !important;
     }
   `;
 
-  // IF USER IS NOT LOGGED IN, RENDER AUTHENTICATION VIEW (Trakt style cinematic dark login)
+  // Render Auth Modal if user is not logged in
   if (!token) {
-    return (
-      <>
-        <style>{dynamicStyles}</style>
-        <div className="min-h-screen text-[#f3f4f6] flex items-center justify-center p-4 relative font-sans selection:bg-[#ff2e43] selection:text-white overflow-hidden bg-[#050608]">
-          {/* Ambient background glows */}
-          <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-[#ff2e43]/5 rounded-full blur-[140px] pointer-events-none" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-500/5 rounded-full blur-[140px] pointer-events-none" />
-
-          <div className="w-full max-w-md bg-[#0f1015]/80 border border-[#1f212a] rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
-            {/* Top Brand Banner */}
-            <div className="flex flex-col items-center text-center gap-3 mb-8">
-              <div className="p-3 bg-[#ff2e43] rounded-2xl shadow-lg shadow-[#ff2e43]/20 animate-pulse">
-                <Play className="w-6 h-6 text-white fill-white ml-0.5" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-black tracking-tight text-white flex items-center justify-center gap-1">
-                  Binge<span className="text-[#ff2e43]">Log</span>
-                </h1>
-                <p className="text-xs text-slate-400 mt-1 font-semibold uppercase tracking-wider">Cinematic Entertainment Ledger</p>
-              </div>
-            </div>
-
-            {/* Form Content */}
-            {isForgotPassword ? (
-              <form onSubmit={isResettingPassword ? handleResetPassword : handleForgotPassword} className="space-y-4">
-                <h2 className="text-xs font-bold uppercase tracking-widest text-[#ff2e43] mb-2">
-                  {isResettingPassword ? "Reset Password" : "Forgot Password"}
-                </h2>
-
-                {authError && (
-                  <div className="p-3 bg-red-950/20 border border-[#ff2e43]/30 text-[#ff2e43] text-xs font-semibold rounded-xl">
-                    ⚠️ {authError}
-                  </div>
-                )}
-
-                {successMessage && (
-                  <div className="p-3 bg-emerald-950/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold rounded-xl">
-                    ✓ {successMessage}
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase font-bold text-slate-400">Email Address</label>
-                  <input
-                    type="email"
-                    placeholder="Enter email address"
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    disabled={isResettingPassword}
-                    className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold disabled:opacity-50"
-                    autoComplete="email"
-                    required
-                  />
-                </div>
-
-                {isResettingPassword && (
-                  <>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] uppercase font-bold text-slate-400">Verification Code</label>
-                      <input
-                        type="text"
-                        placeholder="Enter 6-digit code"
-                        value={otpInput}
-                        onChange={(e) => setOtpInput(e.target.value)}
-                        className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] uppercase font-bold text-slate-400">New Password</label>
-                      <input
-                        type="password"
-                        placeholder="Enter new password"
-                        value={newPasswordInput}
-                        onChange={(e) => setNewPasswordInput(e.target.value)}
-                        className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                        required
-                      />
-                    </div>
-                  </>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="w-full py-3.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-[#ff2e43]/20 active:scale-95 flex items-center justify-center gap-2 min-h-[44px] mt-6"
-                >
-                  {authLoading ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : isResettingPassword ? (
-                    "Reset Password & Sign In"
-                  ) : (
-                    "Send Verification Code"
-                  )}
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
-                <h2 className="text-xs font-bold uppercase tracking-widest text-[#ff2e43] mb-2">
-                  {isRegistering ? "Create Account" : "Access Watchlist"}
-                </h2>
-
-                {authError && (
-                  <div className="p-3 bg-red-950/20 border border-[#ff2e43]/30 text-[#ff2e43] text-xs font-semibold rounded-xl">
-                    ⚠️ {authError}
-                  </div>
-                )}
-
-                {isRegistering && (
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-bold text-slate-400">Username</label>
-                    <input
-                      type="text"
-                      placeholder="Enter username"
-                      value={usernameInput}
-                      onChange={(e) => setUsernameInput(e.target.value)}
-                      className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                      autoComplete="username"
-                      required
-                    />
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase font-bold text-slate-400">Email Address</label>
-                  <input
-                    type="email"
-                    placeholder="Enter email address"
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                    autoComplete="email"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[10px] uppercase font-bold text-slate-400">Password</label>
-                    {!isRegistering && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsForgotPassword(true);
-                          setAuthError("");
-                          setSuccessMessage("");
-                        }}
-                        className="text-[10px] font-bold text-[#ff2e43] hover:underline focus:outline-none"
-                      >
-                        Forgot Password?
-                      </button>
-                    )}
-                  </div>
-                  <input
-                    type="password"
-                    placeholder="Enter password"
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-4 py-3.5 text-[#f3f4f6] placeholder-slate-600 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                    autoComplete={isRegistering ? "new-password" : "current-password"}
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="w-full py-3.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-[#ff2e43]/20 active:scale-95 flex items-center justify-center gap-2 min-h-[44px] mt-6"
-                >
-                  {authLoading ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : isRegistering ? (
-                    "Create Free Account"
-                  ) : (
-                    "Sign In"
-                  )}
-                </button>
-              </form>
-            )}
-
-            {/* Form Switcher */}
-            <div className="mt-6 pt-4 border-t border-[#1f212a] text-center">
-              {isForgotPassword ? (
-                <button
-                  onClick={() => {
-                    setIsForgotPassword(false);
-                    setIsResettingPassword(false);
-                    setAuthError("");
-                    setSuccessMessage("");
-                  }}
-                  className="text-[11px] font-bold text-slate-400 hover:text-[#ff2e43] transition-all"
-                >
-                  Back to Sign In
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    setIsRegistering(!isRegistering);
-                    setAuthError("");
-                    setSuccessMessage("");
-                  }}
-                  className="text-[11px] font-bold text-slate-400 hover:text-[#ff2e43] transition-all"
-                >
-                  {isRegistering ? "Already have an account? Sign In" : "Don't have an account yet? Register here"}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </>
-    );
+    return <AuthModal onSuccess={setAuthSession} dynamicStyles={dynamicStyles} />;
   }
 
   return (
     <div className="min-h-screen bg-[#050608] text-[#f3f4f6] font-sans selection:bg-[#ff2e43] selection:text-white overflow-x-hidden pb-12">
       <style>{dynamicStyles}</style>
 
-      {/* Floating Webhook Progress Notification Card */}
+      {/* Floating Webhook Progress Notification Toast */}
       {showNotification && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-[#0f1015] border border-[#1f212a] text-slate-200 px-4 py-3.5 rounded-2xl shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom-4 duration-200 max-w-[90vw]">
           <Zap className="w-4 h-4 text-[#ff2e43] fill-[#ff2e43] flex-shrink-0 animate-bounce" />
           <span className="text-xs font-semibold">{notificationMsg}</span>
         </div>
       )}
-      {/* EXTENSION MANAGEMENT MODAL */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
-          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
 
-            {/* Header */}
-            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
-              <div className="flex items-center gap-2">
-                <Puzzle className="w-5 h-5 text-[#ff2e43]" />
-                <h2 className="text-base font-bold text-slate-100">Extension Management</h2>
-              </div>
-              <button
-                onClick={() => setIsSettingsOpen(false)}
-                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5">
-                  Chrome Extension Auto-Sync
-                </label>
-                <a
-                  href="/extension.zip"
-                  download
-                  className="inline-flex items-center justify-center gap-2 w-full bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-200 hover:text-white border border-[#1f212a] hover:border-[#ff2e43]/20 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
-                >
-                  <span>📥 Download Extension (.zip)</span>
-                </a>
-              </div>
-
-              <div className="border-t border-[#1f212a] pt-4">
-                <p className="font-extrabold text-slate-400 uppercase tracking-wider text-[9px] mb-2">Manual Installation Steps:</p>
-                <div className="space-y-1.5 text-[10px] text-slate-350 leading-relaxed font-medium">
-                  <p>1. Extract the downloaded <code className="text-slate-400 font-mono">extension.zip</code> file.</p>
-                  <p>2. Open <code className="text-slate-400 font-mono">chrome://extensions/</code> in Google Chrome.</p>
-                  <p>3. Toggle <strong className="text-slate-200 font-bold">Developer mode</strong> (top-right switch) to ON.</p>
-                  <p>4. Click <strong className="text-slate-200 font-bold">Load unpacked</strong> (top-left) and select the extracted folder.</p>
-                </div>
-              </div>
-
-              <div className="border-t border-[#1f212a] pt-4">
-                <p className="font-extrabold text-slate-400 uppercase tracking-wider text-[9px] mb-2">How to Use & Sync:</p>
-                <ul className="space-y-2 text-[10px] text-slate-300 leading-relaxed font-medium list-disc list-inside">
-                  <li>Ensure you are logged into this web application. The extension automatically syncs your session token from local storage.</li>
-                  <li>When watching anime or media on supported sites (<strong className="text-slate-200">Crunchyroll, animepahe.pw, animesuge.cz, 9anime.org.lv</strong>), progress will track automatically.</li>
-                  <li>If the series isn't in your watchlist, a toast will prompt you to add it instantly.</li>
-                  <li>When you watch more than <strong className="text-[#ff2e43]">85%</strong> of an episode, progress increments automatically in the background.</li>
-                </ul>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-end px-6">
-              <button
-                onClick={() => setIsSettingsOpen(false)}
-                className="px-5 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
-              >
-                Close
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* iOS INSTALL INSTRUCTIONS MODAL */}
-      {isIosInstallOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
-          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
-            {/* Header */}
-            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
-              <div className="flex items-center gap-2">
-                <Smartphone className="w-5 h-5 text-[#ff2e43]" />
-                <h2 className="text-base font-bold text-slate-100">Install BingeLog</h2>
-              </div>
-              <button
-                onClick={() => setIsIosInstallOpen(false)}
-                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {/* Body */}
-            <div className="p-6 flex flex-col gap-5 text-slate-350 text-xs leading-relaxed font-medium">
-              <p>Add BingeLog to your home screen to use it as a native standalone app on your iPhone or iPad.</p>
-
-              <div className="flex flex-col gap-4 bg-[#050608] border border-[#1f212a] p-4 rounded-2xl">
-                <div className="flex items-start gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-[#1f212a] flex items-center justify-center text-[10px] font-black text-[#ff2e43] border border-white/5">1</span>
-                  <div>
-                    <p className="text-slate-200 font-bold mb-0.5">Open in Safari</p>
-                    <p className="text-[10px] text-slate-555">Make sure you are using Apple's Safari browser.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-[#1f212a] flex items-center justify-center text-[10px] font-black text-[#ff2e43] border border-white/5">2</span>
-                  <div>
-                    <p className="text-slate-200 font-bold mb-0.5">Tap the Share Button</p>
-                    <p className="text-[10px] text-slate-555">Tap the Share icon <span className="inline-block px-1.5 py-0.5 bg-[#1f212a] text-slate-300 rounded border border-white/5 mx-0.5 text-[8px] font-bold">Share</span> (the square with an arrow pointing up) at the bottom or top of Safari.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-[#1f212a] flex items-center justify-center text-[10px] font-black text-[#ff2e43] border border-white/5">3</span>
-                  <div>
-                    <p className="text-slate-200 font-bold mb-0.5">Add to Home Screen</p>
-                    <p className="text-[10px] text-slate-555">Scroll down the share list and tap <span className="text-slate-200 font-bold">Add to Home Screen</span>.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-[#1f212a] bg-[#0f1015]/50 flex justify-end px-6">
-              <button
-                onClick={() => setIsIosInstallOpen(false)}
-                className="px-5 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
-              >
-                Got it
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* EXIT CONFIRMATION MODAL */}
-      {isExitModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="bg-[#0f1015] border border-[#1f212a] rounded-3xl w-full max-w-xs overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
-            {/* Header */}
-            <div className="p-4 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
-              <div className="flex items-center gap-2">
-                <LogOut className="w-4 h-4 text-[#ff2e43]" />
-                <h2 className="text-xs font-bold text-slate-100 uppercase tracking-wider">Exit App</h2>
-              </div>
-              <button
-                onClick={() => setIsExitModalOpen(false)}
-                className="p-1.5 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-lg transition-all"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            {/* Body */}
-            <div className="p-5 text-center text-slate-300 text-xs leading-relaxed font-semibold">
-              Are you sure you want to close BingeLog?
-            </div>
-            {/* Actions */}
-            <div className="p-4 border-t border-[#1f212a] bg-[#0f1015]/50 flex gap-2 justify-end">
-              <button
-                onClick={() => setIsExitModalOpen(false)}
-                className="flex-1 py-2.5 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-350 rounded-xl text-xs font-bold transition-all active:scale-95 text-center"
-              >
-                No, Stay
-              </button>
-              <button
-                onClick={handleExitApp}
-                className="flex-1 py-2.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all active:scale-95 text-center"
-              >
-                Yes, Exit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* THEME CUSTOMIZATION MODAL */}
-      {isThemeOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4 animate-fade-in">
-          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
-
-            {/* Header */}
-            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
-              <div className="flex items-center gap-2">
-                <Palette className="w-5 h-5 text-[#ff2e43]" />
-                <h2 className="text-base font-bold text-slate-100">Theme Customization</h2>
-              </div>
-              <button
-                onClick={() => setIsThemeOpen(false)}
-                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all active:scale-95"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
-              <p className="text-xs text-slate-400 font-medium leading-relaxed">
-                Choose a coordinated color profile template. The selected theme will dynamically apply to the entire dashboard and mobile interface layout instantly.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
-                {Object.entries(THEMES).map(([key, theme]) => {
-                  const isActive = activeTheme === key;
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => {
-                        setActiveTheme(key);
-                        localStorage.setItem("UMT_ACTIVE_THEME", key);
-                      }}
-                      className={`relative w-full text-left p-4 rounded-2xl border transition-all duration-200 hover:scale-[1.02] flex flex-col justify-between h-36 focus:outline-none ${isActive
-                        ? "bg-[#1f212a] shadow-lg"
-                        : "bg-[#0f1015] hover:bg-[#1f212a]/50"
-                        }`}
-                      style={{
-                        borderColor: isActive ? theme.accent : "var(--color-card-border)",
-                        boxShadow: isActive ? `0 0 15px rgba(${theme.accentRgb}, 0.15)` : "none"
-                      }}
-                    >
-                      <div className="space-y-1.5 w-full">
-                        <div className="flex justify-between items-center w-full">
-                          <span className="text-xs font-bold text-slate-100">{theme.name}</span>
-                          {isActive && (
-                            <span
-                              className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider text-white flex items-center gap-1"
-                              style={{ backgroundColor: theme.accent }}
-                            >
-                              <Check className="w-2.5 h-2.5 stroke-[3]" /> Active
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-400 leading-relaxed font-medium">
-                          {theme.description}
-                        </p>
-                      </div>
-
-                      {/* Visual Color Bar Preview */}
-                      <div className="flex items-center justify-between w-full mt-4 pt-2 border-t border-[#1f212a]/40">
-                        <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wider">Palette</span>
-                        <div className="flex gap-1.5">
-                          <span className="w-5 h-5 rounded-lg border border-slate-800 flex items-center justify-center text-[8px] text-slate-500 font-bold" style={{ backgroundColor: theme.background }} title="Background">Bg</span>
-                          <span className="w-5 h-5 rounded-lg border border-slate-800 flex items-center justify-center text-[8px] text-slate-500 font-bold" style={{ backgroundColor: theme.cardBg }} title="Cards">Cd</span>
-                          <span className="w-5 h-5 rounded-lg border border-slate-800 flex items-center justify-center text-[8px] text-slate-500 font-bold" style={{ backgroundColor: theme.cardBorder }} title="Borders">Bd</span>
-                          <span className="w-5 h-5 rounded-lg flex items-center justify-center text-[8px] text-white font-bold" style={{ backgroundColor: theme.accent }} title="Accent">Ac</span>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-end px-6">
-              <button
-                onClick={() => setIsThemeOpen(false)}
-                className="px-5 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
-              >
-                Done
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* CHANGE PASSWORD MODAL */}
-      {isChangePasswordOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
-          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
-
-            {/* Header */}
-            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
-              <div className="flex items-center gap-2">
-                <Key className="w-5 h-5 text-[#ff2e43]" />
-                <h2 className="text-base font-bold text-slate-100">Change Password</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsChangePasswordOpen(false);
-                  setChangePasswordError("");
-                  setChangePasswordSuccess("");
-                  setCurrentPasswordInput("");
-                  setChangePasswordNewInput("");
-                  setChangePasswordConfirmInput("");
-                }}
-                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Content */}
-            <form onSubmit={handleChangePassword} className="flex flex-col flex-1">
-              <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
-                {changePasswordError && (
-                  <div className="p-3 bg-red-950/30 border border-red-500/20 text-[#ff2e43] rounded-xl text-xs font-semibold animate-in fade-in duration-250">
-                    {changePasswordError}
-                  </div>
-                )}
-                {changePasswordSuccess && (
-                  <div className="p-3 bg-emerald-950/30 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs font-semibold animate-in fade-in duration-250">
-                    {changePasswordSuccess}
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-450">
-                    Current Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={currentPasswordInput}
-                    onChange={(e) => setCurrentPasswordInput(e.target.value)}
-                    placeholder="Enter current password"
-                    className="w-full px-4 py-3 bg-[#050608] border border-[#1f212a] hover:border-slate-800 focus:border-[#ff2e43] focus:ring-1 focus:ring-[#ff2e43] rounded-xl text-xs font-semibold text-slate-200 placeholder-slate-600 transition-all outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-450">
-                    New Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={changePasswordNewInput}
-                    onChange={(e) => setChangePasswordNewInput(e.target.value)}
-                    placeholder="Min 6 characters"
-                    className="w-full px-4 py-3 bg-[#050608] border border-[#1f212a] hover:border-slate-800 focus:border-[#ff2e43] focus:ring-1 focus:ring-[#ff2e43] rounded-xl text-xs font-semibold text-slate-200 placeholder-slate-600 transition-all outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-450">
-                    Confirm New Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={changePasswordConfirmInput}
-                    onChange={(e) => setChangePasswordConfirmInput(e.target.value)}
-                    placeholder="Confirm new password"
-                    className="w-full px-4 py-3 bg-[#050608] border border-[#1f212a] hover:border-slate-800 focus:border-[#ff2e43] focus:ring-1 focus:ring-[#ff2e43] rounded-xl text-xs font-semibold text-slate-200 placeholder-slate-600 transition-all outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-end gap-3 px-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsChangePasswordOpen(false);
-                    setChangePasswordError("");
-                    setChangePasswordSuccess("");
-                    setCurrentPasswordInput("");
-                    setChangePasswordNewInput("");
-                    setChangePasswordConfirmInput("");
-                  }}
-                  className="px-5 py-2.5 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-350 rounded-xl text-xs font-bold transition-all active:scale-95"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={changePasswordLoading}
-                  className="px-5 py-2.5 bg-[#ff2e43] hover:bg-[#e02034] disabled:bg-[#ff2e43]/50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 shadow-[#ff2e43]/15 flex items-center gap-2"
-                >
-                  {changePasswordLoading ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Updating...
-                    </>
-                  ) : (
-                    "Update Password"
-                  )}
-                </button>
-              </div>
-            </form>
-
-          </div>
-        </div>
-      )}
-
-      {/* IMPORT / EXPORT MODAL */}
-      {isImportExportOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
-
-            {/* Header */}
-            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
-              <div className="flex items-center gap-2">
-                <Database className="w-5 h-5 text-[#ff2e43]" />
-                <h2 className="text-base font-bold text-slate-100">Import / Export Watchlist</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsImportExportOpen(false);
-                  setImportMessage(null);
-                }}
-                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
-              {importMessage && (
-                <div
-                  className={`p-3 border rounded-xl text-xs font-semibold animate-in fade-in duration-250 ${importMessage.type === "success"
-                    ? "bg-emerald-955/20 border-emerald-500/30 text-emerald-450"
-                    : "bg-red-955/20 border-red-500/30 text-[#ff2e43]"
-                    }`}
-                >
-                  {importMessage.text}
-                </div>
-              )}
-
-              {/* Export Section */}
-              <div className="space-y-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-450">Export Watchlist</h3>
-                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
-                  Download a backup file of your entire watchlist including media titles, progress records, ratings, and status.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleExportWatchlist}
-                  className="w-full py-3 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-200 hover:text-white border border-[#1f212a] hover:border-[#ff2e43]/25 rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <span>📤 Download Backup JSON</span>
-                </button>
-              </div>
-
-              {/* Import Section */}
-              <div className="space-y-3 pt-4 border-t border-[#1f212a]">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-450">Import Watchlist</h3>
-                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
-                  Upload a previously exported `.json` file to restore your watchlist or import entries from another tracker.
-                </p>
-
-                {/* Drag and drop zone */}
-                <div className="relative group border-2 border-dashed border-[#1f212a] hover:border-[#ff2e43]/20 rounded-2xl p-6 text-center transition-all bg-[#050608]/40">
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleImportWatchlist(file);
-                    }}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    disabled={isImporting}
-                  />
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <Database className="w-8 h-8 text-slate-600 group-hover:text-[#ff2e43] transition-colors" />
-                    {isImporting ? (
-                      <div className="flex flex-col items-center gap-2 w-full">
-                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                          <div className="w-3.5 h-3.5 border-2 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
-                          <span>Importing: {importProgress?.current} / {importProgress?.total} ({importProgress?.percentage}%)</span>
-                        </div>
-                        <div className="w-full bg-[#15171e] h-2 rounded-full overflow-hidden mt-1">
-                          <div
-                            className="bg-[#ff2e43] h-full rounded-full transition-all duration-200"
-                            style={{ width: `${importProgress?.percentage}%` }}
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsMinimizedImport(true);
-                            setIsImportExportOpen(false);
-                          }}
-                          className="mt-2 text-[10px] text-slate-400 hover:text-slate-200 bg-[#1f212a] hover:bg-[#2b2e3b] px-3 py-1.5 rounded-lg border border-[#1f212a] transition-all font-bold"
-                        >
-                          Run in Background
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <p className="text-xs font-bold text-slate-300">Drag & Drop or Click to Select File</p>
-                        <p className="text-[9px] text-slate-500 font-medium">Supports JSON watchlist exports</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-end px-6">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsImportExportOpen(false);
-                  setImportMessage(null);
-                }}
-                className="px-5 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
-              >
-                Close
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* Floating Import Progress (Minimized or Modal Closed) */}
-      {importProgress && (isMinimizedImport || !isImportExportOpen) && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#0f1015]/90 border border-[#1f212a] backdrop-blur-md rounded-2xl p-4 w-72 shadow-2xl animate-in slide-in-from-bottom duration-300">
-          <div className="flex justify-between items-start mb-2">
-            <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-[#ff2e43] animate-pulse" />
-              <span className="text-xs font-bold text-slate-105">
-                {importProgress.current < importProgress.total ? "Importing Watchlist..." : "Import Completed!"}
-              </span>
-            </div>
-            {importProgress.current < importProgress.total && (
-              <button
-                onClick={() => {
-                  setIsImportExportOpen(true);
-                  setIsMinimizedImport(false);
-                }}
-                className="text-[9px] font-extrabold text-[#ff2e43] hover:underline"
-              >
-                Expand
-              </button>
-            )}
-          </div>
-          <div className="space-y-1">
-            <div className="flex justify-between text-[10px] font-medium text-slate-400">
-              <span>{importProgress.current} / {importProgress.total} items</span>
-              <span>{importProgress.percentage}%</span>
-            </div>
-            <div className="w-full bg-[#050608] h-1.5 rounded-full overflow-hidden">
-              <div
-                className="bg-[#ff2e43] h-full rounded-full transition-all duration-350"
-                style={{ width: `${importProgress.percentage}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MOBILE-ONLY FILTER DRAWER (Centered Modal Dialog) */}
-      {isFilterDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 md:hidden animate-in fade-in duration-200">
-          <div className="glass-panel border border-[#1f212a] rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
-
-            {/* Drawer Header */}
-            <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-[#ff2e43]" />
-                <h2 className="text-sm font-bold text-slate-100 uppercase tracking-wider">Filter Ledger</h2>
-              </div>
-              <button
-                onClick={() => setIsFilterDrawerOpen(false)}
-                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Drawer Content */}
-            <div className="p-6 space-y-6 overflow-y-auto max-h-[60vh]">
-              {/* Media Type Section */}
-              <div className="space-y-3">
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                  Media Type
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { label: "All Media", value: "ALL" },
-                    { label: "Anime", value: "ANIME" },
-                    { label: "Manga", value: "MANGA" },
-                    { label: "Series", value: "TV_SHOW" },
-                    { label: "Movies", value: "MOVIE" }
-                  ].map((tab) => (
-                    <button
-                      key={tab.value}
-                      onClick={() => setActiveTab(tab.value as any)}
-                      className={`flex items-center justify-center gap-2 py-3.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all select-none duration-200 cursor-pointer ${activeTab === tab.value
-                        ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 border border-[#ff2e43]"
-                        : "bg-[#050608]/50 border border-[#1f212a] text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/30"
-                        } ${tab.value === "ALL" ? "col-span-2" : ""}`}
-                    >
-                      {tab.value === "ALL" && <Layers className="w-3.5 h-3.5" />}
-                      {tab.value === "ANIME" && <Film className="w-3.5 h-3.5" />}
-                      {tab.value === "MANGA" && <BookOpen className="w-3.5 h-3.5" />}
-                      {tab.value === "TV_SHOW" && <Tv className="w-3.5 h-3.5" />}
-                      {tab.value === "MOVIE" && <Play className="w-3.5 h-3.5" />}
-                      <span>{tab.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Status Section */}
-              <div className="space-y-3">
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                  Progress Status
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { label: "All Statuses", value: "ALL" },
-                    { label: "Ongoing", value: "ONGOING" },
-                    { label: "Completed", value: "COMPLETED" }
-                  ].map((tab) => (
-                    <button
-                      key={tab.value}
-                      onClick={() => setStatusFilter(tab.value as any)}
-                      className={`flex items-center justify-center gap-1.5 py-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all select-none duration-200 cursor-pointer ${statusFilter === tab.value
-                        ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 border border-[#ff2e43]"
-                        : "bg-[#050608]/50 border border-[#1f212a] text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/30"
-                        }`}
-                    >
-                      {tab.value === "ALL" && <Layers className="w-3 h-3" />}
-                      {tab.value === "ONGOING" && <Activity className="w-3 h-3" />}
-                      {tab.value === "COMPLETED" && <CheckCircle className="w-3 h-3" />}
-                      <span>{tab.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Drawer Footer Actions */}
-            <div className="p-5 border-t border-[#1f212a] bg-[#050608]/50 flex flex-col gap-3">
-              {/* Reset Link */}
-              {((activeTab !== "ALL") || (statusFilter !== "ALL")) && (
-                <button
-                  onClick={() => {
-                    setActiveTab("ALL");
-                    setStatusFilter("ALL");
-                  }}
-                  className="text-center text-[10px] font-extrabold uppercase tracking-widest text-slate-500 hover:text-[#ff2e43] py-1 transition-all"
-                >
-                  Reset Active Filters
-                </button>
-              )}
-              {/* Apply Primary CTA */}
-              <button
-                onClick={() => setIsFilterDrawerOpen(false)}
-                className="w-full py-3.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-[#ff2e43]/20 active:scale-95 text-center flex items-center justify-center gap-2 min-h-[44px]"
-              >
-                <span>Show {filteredMedia.length} Match{filteredMedia.length !== 1 ? "es" : ""}</span>
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* DYNAMIC 'ADD MEDIA' DIALOG MODAL (Fully Mobile-Friendly) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4">
-          <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col h-[90vh] sm:h-auto sm:max-h-[85vh] animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
-
-            {/* Modal Header */}
-            <div className="p-5 sm:p-6 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
-              <div className="flex items-center gap-2">
-                <PlusCircle className="w-5 h-5 text-[#ff2e43]" />
-                <h2 className="text-base sm:text-lg font-bold text-slate-100">Add New Media</h2>
-              </div>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Search Controls */}
-            <div className="p-5 sm:p-6 bg-[#050608]/50 border-b border-[#1f212a] flex flex-col sm:flex-row gap-3 sm:gap-4">
-              {/* Query Input */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-450" />
-                <input
-                  type="text"
-                  placeholder="Search live online databases... (e.g. Solo Leveling, Game of Thrones)"
-                  value={modalSearchQuery}
-                  onChange={(e) => setModalSearchQuery(e.target.value)}
-                  className="w-full bg-[#0f1015] border border-[#1f212a] text-base md:text-sm rounded-xl pl-10 pr-4 py-3 sm:py-2.5 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                />
-              </div>
-
-              {/* Type Filter */}
-              <select
-                value={selectedMediaType}
-                onChange={(e) => setSelectedMediaType(e.target.value as any)}
-                className="bg-[#0f1015] border border-[#1f212a] text-base md:text-sm rounded-xl px-4 py-3 sm:py-2.5 text-slate-300 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-              >
-                <option value="ALL">All Categories</option>
-                <option value="ANIME">Anime (Live AniList)</option>
-                <option value="MANGA">Manga & Novels (Live AniList)</option>
-                <option value="TV_SHOW">TV Series (Live TMDB)</option>
-                <option value="MOVIE">Movies (Live TMDB)</option>
-              </select>
-            </div>
-
-            {/* Modal Search Results list */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 max-h-[50vh] sm:max-h-[45vh]">
-              {isLoadingSearch ? (
-                <div className="text-center py-16 text-[#ff2e43] flex flex-col items-center justify-center gap-3">
-                  <div className="w-8 h-8 border-4 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
-                  <p className="text-xs font-semibold text-slate-400">Searching global entertainment index...</p>
-                </div>
-              ) : searchResults.length > 0 ? (
-                searchResults.map((result) => (
-                  <div
-                    key={result.id}
-                    className="flex gap-4 p-4 bg-[#050608]/40 border border-[#1f212a] rounded-2xl hover:border-[#ff2e43]/25 transition-all group"
-                  >
-                    {/* Cover image */}
-                    <div className="w-16 h-24 bg-[#1f212a] rounded-xl overflow-hidden flex-shrink-0">
-                      <img src={result.coverImage} alt={result.title} className="w-full h-full object-cover" />
-                    </div>
-
-                    {/* Details */}
-                    <div className="flex-1 flex flex-col justify-between min-w-0">
-                      <div>
-                        <div className="flex justify-between items-start gap-2">
-                          <h4 className="text-sm font-bold text-slate-200 group-hover:text-[#ff2e43] transition-colors truncate">{result.title}</h4>
-                          <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#ff2e43]/10 border border-[#ff2e43]/25 text-[#ff2e43] rounded-full flex-shrink-0">{result.type}</span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5 truncate">{result.franchise}</p>
-                        <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed mt-1">{result.synopsis}</p>
-                      </div>
-
-                      <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-[#1f212a]">
-                        <span className="text-[10px] text-slate-550 font-medium">Released: {result.totalProgress} {result.progressType}s</span>
-                        {mediaList.some((item) => item.title.toLowerCase() === result.title.toLowerCase() && item.type === result.type) ? (
-                          <div className="py-1.5 px-4 bg-emerald-955/20 border border-emerald-500/30 text-emerald-450 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-default">
-                            <Check className="w-3.5 h-3.5 text-emerald-450" />
-                            Added
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleAddMedia(result)}
-                            className="py-1.5 px-4 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-95"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Track Media
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-12 text-slate-500 flex flex-col items-center gap-2">
-                  <Info className="w-8 h-8 text-[#1f212a]" />
-                  <p className="text-sm font-medium">Type a show, movie, or manga name above.</p>
-                  <p className="text-xs text-slate-650">We query dynamic live databases to retrieve media data instantly.</p>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer Info */}
-            <div className="p-4 border-t border-[#1f212a] bg-[#050608]/50 flex justify-between items-center text-[10px] text-slate-500 font-semibold px-6">
-              <span></span>
-              <span className="hidden sm:flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-slate-400" /></span>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* MEDIA DETAILS MODAL */}
-      {selectedDetailsItem && (() => {
-        // Resolve item from active mediaList to display live progress updates!
-        const detailsItem = mediaList.find(m => m.id === selectedDetailsItem.id) || selectedDetailsItem;
-        const percent = Math.round((detailsItem.currentProgress / detailsItem.totalProgress) * 100);
-        const isCompleted = detailsItem.currentProgress === detailsItem.totalProgress;
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4" onClick={() => setSelectedDetailsItem(null)}>
-            <div className="bg-[#0f1015] border-t sm:border border-[#1f212a] rounded-t-3xl sm:rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col h-[85vh] sm:h-auto sm:max-h-[85vh] animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
-
-              {/* Modal Header */}
-              <div className="p-5 border-b border-[#1f212a] flex justify-between items-center bg-[#0f1015]/50">
-                <div className="flex items-center gap-2">
-                  <Film className="w-5 h-5 text-[#ff2e43]" />
-                  <h2 className="text-base font-bold text-slate-100 uppercase tracking-wider">Media Details</h2>
-                </div>
-                <button
-                  onClick={() => setSelectedDetailsItem(null)}
-                  className="p-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-400 hover:text-slate-100 rounded-xl transition-all"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Modal Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                <div className="flex flex-col sm:flex-row gap-6">
-                  {/* Poster image */}
-                  <div className="w-40 h-60 bg-slate-900 rounded-2xl overflow-hidden border border-[#1f212a] flex-shrink-0 mx-auto sm:mx-0 shadow-lg relative">
-                    <img src={detailsItem.coverImage} alt={detailsItem.title} className="w-full h-full object-cover" />
-                    <span className="absolute bottom-3 left-3 text-[9px] font-extrabold px-2.5 py-1 rounded bg-black/85 text-slate-200 border border-[#1f212a] uppercase tracking-widest">
-                      {detailsItem.type}
-                    </span>
-                  </div>
-
-                  {/* Title & Stats */}
-                  <div className="flex-1 flex flex-col justify-between min-w-0">
-                    <div>
-                      <span className="text-[10px] font-extrabold text-[#ff2e43] uppercase tracking-widest block font-mono">
-                        {detailsItem.franchise}
-                      </span>
-                      <h3 className="text-xl font-black text-slate-100 mt-1.5 leading-snug">
-                        {detailsItem.title}
-                      </h3>
-
-                      <div className="flex flex-wrap items-center gap-2.5 mt-3">
-                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider ${isCompleted
-                          ? "bg-emerald-950 text-emerald-400 border border-emerald-500/25"
-                          : "bg-[#ff2e43]/15 text-[#ff2e43] border border-[#ff2e43]/20"
-                          }`}>
-                          {isCompleted ? "Completed" : "Releasing / Tracking"}
-                        </span>
-
-                        <span className="text-[10px] text-slate-450 font-bold bg-[#1f212a] px-2.5 py-1 rounded-md uppercase tracking-wider">
-                          Status: {detailsItem.status}
-                        </span>
-
-                        <span className="text-[10px] text-slate-450 font-bold bg-[#1f212a] px-2.5 py-1 rounded-md uppercase tracking-wider">
-                          Size: {detailsItem.totalProgress} {detailsItem.progressType}s
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Airing Information */}
-                    {detailsItem.nextAiringEpisode && !isCompleted && (
-                      <div className="mt-4 p-3 bg-[#050608] border border-[#1f212a] rounded-xl flex items-center gap-2.5">
-                        <Tv className="w-5 h-5 text-[#ff2e43] flex-shrink-0" />
-                        <div>
-                          <p className="text-xs font-bold text-slate-200">
-                            Upcoming Episode {detailsItem.nextAiringEpisode.episode}
-                          </p>
-                          <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
-                            Releases in {Math.ceil(detailsItem.nextAiringEpisode.timeUntilAiring / 3600 / 24)} days ({new Date(detailsItem.nextAiringEpisode.airingAt * 1000).toLocaleDateString()})
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Progress bar */}
-                    <div className="space-y-2.5 mt-6 sm:mt-4">
-                      <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-slate-350">
-                        <span>Progress: {detailsItem.currentProgress}/{detailsItem.totalProgress} {detailsItem.progressType}s</span>
-                        <span className={isCompleted ? "text-emerald-400" : "text-[#ff2e43]"}>{percent}%</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-[#050608] rounded-full overflow-hidden">
-                        <div
-                          style={{ width: `${percent}%` }}
-                          className={`h-full rounded-full transition-all duration-500 ${isCompleted ? "bg-emerald-505" : "bg-[#ff2e43]"}`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Synopsis / Description */}
-                <div className="space-y-2">
-                  <h4 className="text-xs font-extrabold uppercase tracking-widest text-[#ff2e43]">Synopsis / Description</h4>
-                  <div className="bg-[#050608] border border-[#1f212a] p-4.5 rounded-2xl text-xs text-slate-300 leading-relaxed font-semibold max-h-48 overflow-y-auto">
-                    {loadingDescription ? (
-                      <div className="flex items-center justify-center py-4 gap-2 text-[#ff2e43]">
-                        <div className="w-4.5 h-4.5 border-2 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
-                        <span className="text-slate-450 font-semibold">Fetching description from database/online...</span>
-                      </div>
-                    ) : detailsItem.synopsis ? (
-                      detailsItem.synopsis
-                    ) : (
-                      "No synopsis available for this media."
-                    )}
-                  </div>
-                </div>
-
-                {/* Micro Action Buttons inside Modal */}
-                <div className="space-y-4 pt-2 border-t border-[#1f212a]/50">
-                  <h4 className="text-xs font-extrabold uppercase tracking-widest text-[#ff2e43]">Progress Controls</h4>
-
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      disabled={isCompleted}
-                      onClick={() => handleIncrement(detailsItem.id)}
-                      className={`flex-1 py-3 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-h-[42px] ${isCompleted
-                        ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
-                        : "bg-[#ff2e43] hover:bg-[#e02034] text-white shadow-lg shadow-[#ff2e43]/25 active:scale-95"
-                        }`}
-                    >
-                      {isCompleted ? (
-                        <>
-                          <CheckCircle className="w-4 h-4 text-emerald-400" />
-                          Completed
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-4 h-4" />
-                          Log Next {detailsItem.progressType}
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={(e) => handleCatchUp(detailsItem.id, e)}
-                      disabled={isCompleted}
-                      className={`flex-1 py-3 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-h-[42px] ${isCompleted
-                        ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
-                        : "bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-300 hover:text-white active:scale-95"
-                        }`}
-                    >
-                      <Bookmark className="w-4 h-4" />
-                      Catch Up to Latest
-                    </button>
-
-                    <button
-                      onClick={(e) => {
-                        handleReset(detailsItem.id, e);
-                        setCustomValue("0");
-                      }}
-                      className="p-3 bg-[#0f1015] border border-[#1f212a] hover:border-red-950 text-slate-400 hover:text-[#ff2e43] rounded-xl transition-all min-h-[42px] flex items-center justify-center active:scale-95"
-                      title="Reset tracking count to 0"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteMedia(detailsItem.id)}
-                      className="p-3 bg-red-950/20 border border-red-900/30 hover:bg-[#ff2e43]/10 text-[#ff2e43] rounded-xl transition-all min-h-[42px] flex items-center justify-center active:scale-95"
-                      title="Delete from Watchlist"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Manual entry field inside Modal */}
-                  <div className="bg-[#050608] border border-[#1f212a] p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <Edit2 className="w-4 h-4 text-slate-400" />
-                      <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Set Specific Progress:</span>
-                    </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                      <input
-                        type="number"
-                        min="0"
-                        max={detailsItem.totalProgress}
-                        value={customValue}
-                        onChange={(e) => setCustomValue(e.target.value)}
-                        className="w-20 bg-[#0f1015] border border-[#1f212a] rounded-xl px-3 py-2 text-center text-base md:text-sm font-bold text-[#ff2e43] focus:outline-none focus:border-[#ff2e43]"
-                      />
-                      <button
-                        onClick={() => handleSaveCustomProgress(detailsItem.id, detailsItem.totalProgress, detailsItem.progressType)}
-                        className="px-4 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all active:scale-95 shadow-md shadow-[#ff2e43]/10"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* MAIN TOP BAR (Trakt style header) */}
-      <header className="sticky top-0 z-40 bg-[#050608]/90 backdrop-blur-md border-b border-[#1f212a] px-4 py-3.5 flex flex-col md:flex-row justify-between items-center gap-4 md:px-8">
-
-        {/* Brand Header */}
-        <div className="flex justify-between items-center w-full md:w-auto">
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-[#ff2e43] rounded-lg flex items-center justify-center shadow-lg shadow-[#ff2e43]/20">
-                <Play className="w-4 h-4 text-white fill-white ml-0.5" />
-              </div>
-              <div>
-                <h1 className="text-base font-black tracking-tight text-white flex items-center gap-1.5">
-                  Binge<span className="text-[#ff2e43]">Log v1.1</span>
-                </h1>
-                <p className="text-[9px] text-slate-550 font-bold uppercase tracking-wider">Unified Entertainment Ledger</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Mobile Right Controls */}
-          <div className="flex items-center gap-2 md:hidden">
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="p-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl transition-all shadow-md active:scale-95 shadow-[#ff2e43]/25"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-
-
-        {/* Global Search & Actions */}
-        <div className="flex items-center gap-3 w-full md:w-auto">
-
-          {/* Compact Search Input */}
-          <div className="relative w-full md:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search watchlist..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#0f1015] border border-[#1f212a] text-base md:text-xs rounded-xl pl-9 pr-3.5 py-2 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-            />
-          </div>
-
-          {/* Add Media Trigger Button (Desktop) */}
-          {user && (
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="hidden md:flex items-center gap-1.5 px-4 py-2 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 shadow-[#ff2e43]/15"
-            >
-              <Plus className="w-4 h-4" />
-              Add Media
-            </button>
-          )}
-
-
-
-          {/* Profile Card / Sign Out */}
-          {user && (
-            <div className="hidden md:flex items-center gap-3 pl-3 border-l border-[#1f212a]">
-              <div className="flex flex-col text-right">
-                <span className="text-xs font-bold text-slate-350">{user.username}</span>
-                <span className="text-[8px] text-slate-500 uppercase tracking-widest font-extrabold">Watcher</span>
-              </div>
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-slate-100 hover:border-slate-800 rounded-xl transition-all active:scale-95"
-                title="Extension Management"
-              >
-                <Puzzle className="w-4 h-4" />
-              </button>
-              {isInstallable && (
-                <button
-                  onClick={handleInstallClick}
-                  className="p-2 bg-[#ff2e43]/10 border border-[#ff2e43]/30 text-[#ff2e43] hover:bg-[#ff2e43] hover:text-white hover:border-[#ff2e43] rounded-xl transition-all active:scale-95"
-                  title="Install BingeLog App"
-                >
-                  <Smartphone className="w-4 h-4" />
-                </button>
-              )}
-              <button
-                onClick={() => setIsThemeOpen(true)}
-                className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-slate-100 hover:border-slate-800 rounded-xl transition-all active:scale-95"
-                title="Theme Customization"
-              >
-                <Palette className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setIsChangePasswordOpen(true)}
-                className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-slate-100 hover:border-slate-800 rounded-xl transition-all active:scale-95"
-                title="Change Password"
-              >
-                <Key className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setIsImportExportOpen(true)}
-                className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-slate-100 hover:border-slate-800 rounded-xl transition-all active:scale-95"
-                title="Import/Export Watchlist"
-              >
-                <Database className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleLogout}
-                className="p-2 bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:text-[#ff2e43] hover:border-[#ff2e43]/30 rounded-xl transition-all active:scale-95"
-                title="Sign Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-        </div>
-      </header>
-
-      {/* SUB-HEADER TABS NAVIGATION (Desktop only) */}
+      {/* Modals */}
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+
+      <IosInstallModal isOpen={isIosInstallOpen} onClose={() => setIsIosInstallOpen(false)} />
+
+      <ExitAppModal
+        isOpen={isExitModalOpen}
+        onClose={() => setIsExitModalOpen(false)}
+        onConfirmExit={handleExitApp}
+      />
+
+      <ThemeModal
+        isOpen={isThemeOpen}
+        onClose={() => setIsThemeOpen(false)}
+        activeTheme={activeTheme}
+        setActiveTheme={setActiveTheme}
+      />
+
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+        token={token}
+        onLogout={handleLogout}
+      />
+
+      <ImportExportModal
+        isOpen={isImportExportOpen}
+        onClose={() => setIsImportExportOpen(false)}
+        token={token}
+        user={user}
+        onLogout={handleLogout}
+        onRefreshWatchlist={fetchWatchlist}
+        importProgress={importProgress}
+        setImportProgress={setImportProgress}
+        setIsMinimizedImport={setIsMinimizedImport}
+      />
+
+      <FilterDrawerModal
+        isOpen={isFilterDrawerOpen}
+        onClose={() => setIsFilterDrawerOpen(false)}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        matchCount={filteredMedia.length}
+      />
+
+      <SearchModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        initialQuery={modalSearchQuery}
+        initialCategory={activeTab}
+        mediaList={mediaList}
+        onAddMedia={handleAddMedia}
+      />
+
+      <MediaDetailsModal
+        selectedItem={selectedDetailsItem}
+        mediaList={mediaList}
+        onClose={() => setSelectedDetailsItem(null)}
+        onIncrement={handleIncrement}
+        onCatchUp={handleCatchUp}
+        onReset={handleReset}
+        onDelete={handleDeleteMedia}
+        onSaveCustomProgress={handleSaveCustomProgress}
+        customValue={customValue}
+        setCustomValue={setCustomValue}
+      />
+
+      {/* Header Bar */}
+      <HeaderBar
+        user={user}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        onOpenAddModal={() => {
+          setModalSearchQuery("");
+          setIsModalOpen(true);
+        }}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenTheme={() => setIsThemeOpen(true)}
+        onOpenChangePassword={() => setIsChangePasswordOpen(true)}
+        onOpenImportExport={() => setIsImportExportOpen(true)}
+        onLogout={handleLogout}
+        isInstallable={isInstallable}
+        onInstallClick={handleInstallClick}
+      />
+
+      {/* Desktop Sub-Header Navigation Tabs */}
       {user && (
         <div className="sticky top-[73px] z-30 hidden md:flex items-center justify-center bg-[#050608]/90 backdrop-blur-md border-b border-[#1f212a] py-3.5 shadow-md">
           <div className="flex items-center bg-[#0f1015] border border-[#1f212a] p-1.5 rounded-2xl gap-1">
             {[
-              { id: "LIST", label: "My Ledger", icon: BookOpen },
-              { id: "CALENDAR", label: "Airing Calendar", icon: Tv },
-              { id: "DISCOVER", label: "Discover Catalog", icon: Search },
-              { id: "RELEASES", label: "New Releases", icon: Sparkles },
-              { id: "STATS", label: "Analytics Stats", icon: Layers }
+              { id: "LIST" as MobileTab, label: "My Ledger", icon: BookOpen },
+              { id: "CALENDAR" as MobileTab, label: "Airing Calendar", icon: Tv },
+              { id: "DISCOVER" as MobileTab, label: "Discover Catalog", icon: Search },
+              { id: "RELEASES" as MobileTab, label: "New Releases", icon: Sparkles },
+              { id: "STATS" as MobileTab, label: "Analytics Stats", icon: Layers }
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = mobileActiveTab === tab.id;
               return (
                 <button
                   key={`desktop-nav-${tab.id}`}
-                  onClick={() => setMobileActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 ${isActive
-                    ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 scale-[1.03]"
-                    : "text-slate-400 hover:text-slate-100 hover:bg-[#1f212a]/50"
-                    }`}
+                  onClick={() => setMobileActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 ${
+                    isActive
+                      ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20 scale-[1.03]"
+                      : "text-slate-400 hover:text-slate-100 hover:bg-[#1f212a]/50"
+                  }`}
                 >
                   <Icon className="w-4 h-4" />
                   {tab.label}
@@ -3240,987 +448,98 @@ export default function Home() {
         </div>
       )}
 
+      {/* Main Layout */}
       <main className="max-w-7xl mx-auto px-4 sm:px-8 py-6 sm:py-10 grid grid-cols-1 lg:grid-cols-4 gap-8">
-
-        {/* ========================================================================= */}
-        {/* 1. UP NEXT / CONTINUE WATCHING HERO ROW (Horizontal Carousel)            */}
-        {/* ========================================================================= */}
+        {/* Up Next Carousel */}
         {inProgressMedia.length > 0 && mobileActiveTab === "LIST" && (
-          <section className="col-span-full border-b border-[#1f212a] pb-6 sm:pb-8 animate-in fade-in duration-300">
-            <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="w-4 h-4 text-[#ff2e43] fill-[#ff2e43]" />
-              <h2 className="text-xs font-extrabold uppercase tracking-widest text-[#f3f4f6]">Up Next To Watch</h2>
-            </div>
-
-            <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth">
-              {inProgressMedia.map((item) => {
-                const percent = Math.round((item.currentProgress / item.totalProgress) * 100);
-                const nextTarget = item.currentProgress + 1;
-
-                return (
-                  <div
-                    key={`upnext-${item.id}`}
-                    onClick={() => {
-                      setSelectedDetailsItem(item);
-                      setCustomValue(item.currentProgress.toString());
-                    }}
-                    className="flex-shrink-0 w-80 bg-[#0f1015] border border-[#1f212a] rounded-2xl p-3 flex gap-3 relative hover:border-[#ff2e43]/30 transition-all duration-300 group shadow-md cursor-pointer"
-                  >
-                    {/* Media Poster mini */}
-                    <div className="w-16 h-24 bg-slate-900 rounded-xl overflow-hidden flex-shrink-0 border border-[#1f212a]/50 relative">
-                      <img src={item.coverImage} alt={item.title} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                      <span className="absolute bottom-1 left-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-black/80 text-slate-300 border border-[#1f212a]">
-                        {item.type}
-                      </span>
-                    </div>
-
-                    {/* Progress details */}
-                    <div className="flex-1 flex flex-col justify-between min-w-0">
-                      <div>
-                        <span className="text-[8px] font-bold text-[#ff2e43] uppercase tracking-wider truncate block">{item.franchise}</span>
-                        <h3 className="text-xs font-bold text-slate-200 mt-0.5 truncate pr-6 group-hover:text-[#ff2e43] transition-colors">{item.title}</h3>
-                        <p className="text-[10px] text-slate-400 font-semibold mt-1">
-                          Up Next: <span className="text-slate-100 font-bold">Ep/Ch {nextTarget}</span>
-                          <span className="text-slate-500 font-medium"> of {item.totalProgress}</span>
-                        </p>
-                      </div>
-
-                      {/* Micro progress meter */}
-                      <div className="space-y-1 mt-2">
-                        <div className="h-1 w-full bg-[#050608] rounded-full overflow-hidden">
-                          <div style={{ width: `${percent}%` }} className="h-full bg-gradient-to-r from-[#ff2e43] to-indigo-500 rounded-full" />
-                        </div>
-                        <div className="flex justify-between items-center text-[8px] text-slate-500 font-bold uppercase">
-                          <span>{percent}% Complete</span>
-                          <span>{item.totalProgress - item.currentProgress} remaining</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Fast watch circle trigger button */}
-                    <button
-                      onClick={() => handleIncrement(item.id)}
-                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-[#1f212a] border border-[#2b2e3b] text-slate-400 hover:text-white hover:bg-[#ff2e43] hover:border-[#ff2e43] flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-md"
-                      title={`Instant log ${item.progressType} ${nextTarget}`}
-                    >
-                      <Check className="w-4 h-4" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+          <QuickLogDrawer
+            inProgressMedia={inProgressMedia}
+            onSelectDetails={(item) => setSelectedDetailsItem(item)}
+            setCustomValue={setCustomValue}
+            onIncrement={handleIncrement}
+          />
         )}
 
-        {/* ========================================================================= */}
-        {/* 2. PROGRESS LIST LEDGER GRID (Order-1: Positioned first on mobile)        */}
-        {/* ========================================================================= */}
-        <section className={`lg:col-span-3 flex flex-col gap-6 order-1 lg:order-2 pb-28 lg:pb-0 ${mobileActiveTab === "LIST" ? "flex" : "hidden"}`}>
+        {/* Watchlist Media Grid (LIST View) */}
+        {mobileActiveTab === "LIST" && (
+          <MediaGrid
+            mediaList={mediaList}
+            filteredMedia={filteredMedia}
+            isLoadingWatchlist={isLoadingWatchlist}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            searchQuery={searchQuery}
+            onOpenFilterDrawer={() => setIsFilterDrawerOpen(true)}
+            onOpenAddModal={() => {
+              setModalSearchQuery("");
+              setIsModalOpen(true);
+            }}
+            onOpenSearchModalWithQuery={(q) => {
+              setModalSearchQuery(q);
+              setIsModalOpen(true);
+            }}
+            editingId={editingId}
+            customValue={customValue}
+            setCustomValue={setCustomValue}
+            setEditingId={setEditingId}
+            onSelectDetails={(item) => setSelectedDetailsItem(item)}
+            onIncrement={handleIncrement}
+            onCatchUp={handleCatchUp}
+            onReset={handleReset}
+            onSaveCustomProgress={handleSaveCustomProgress}
+            renderLoader={(isFull) => <Loader loaderIndex={loaderIndex} isFullScreen={isFull} />}
+          />
+        )}
 
-          {/* Unified Ledger Categories Controls */}
-          {(() => {
-            const activeFilterLabel = (() => {
-              const parts: string[] = [];
-              if (activeTab !== "ALL") {
-                const typeLabels: Record<string, string> = {
-                  ANIME: "Anime",
-                  MANGA: "Manga",
-                  TV_SHOW: "Series",
-                  MOVIE: "Movies"
-                };
-                parts.push(typeLabels[activeTab] || activeTab);
-              }
-              if (statusFilter !== "ALL") {
-                const statusLabels: Record<string, string> = {
-                  ONGOING: "Ongoing",
-                  COMPLETED: "Completed"
-                };
-                parts.push(statusLabels[statusFilter] || statusFilter);
-              }
-              return parts.length > 0 ? `Filters: ${parts.join(" • ")}` : "Filters (All)";
-            })();
-
-            return (
-              <div className="bg-[#0f1015] border border-[#1f212a] p-2.5 md:p-2 rounded-2xl w-full shadow-sm">
-
-                {/* Mobile View: side-by-side aligned elements */}
-                <div className="flex md:hidden items-center gap-2 w-full">
-                  {/* Mobile Filter Trigger Button */}
-                  <button
-                    onClick={() => setIsFilterDrawerOpen(true)}
-                    className="flex-grow flex items-center justify-center gap-2 bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-200 border border-[#1f212a] px-4 py-2.5 rounded-xl font-extrabold text-[10px] uppercase tracking-wider transition-all active:scale-95 cursor-pointer min-h-[40px]"
-                  >
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-[#ff2e43]" />
-                    <span>{activeFilterLabel}</span>
-                    {/* Active Filters Summary Count Badge */}
-                    {((activeTab !== "ALL" ? 1 : 0) + (statusFilter !== "ALL" ? 1 : 0)) > 0 && (
-                      <span className="bg-[#ff2e43] text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md animate-pulse">
-                        {(activeTab !== "ALL" ? 1 : 0) + (statusFilter !== "ALL" ? 1 : 0)}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Matches indicator (matches layout height and typography) */}
-                  <div className="flex-shrink-0 flex items-center justify-center bg-[#ff2e43]/10 border border-[#ff2e43]/20 text-[#ff2e43] px-4 py-2.5 rounded-xl font-extrabold text-[10px] uppercase tracking-wider min-h-[40px] whitespace-nowrap">
-                    {filteredMedia.length} Match{filteredMedia.length !== 1 ? "es" : ""}
-                  </div>
-                </div>
-
-                {/* Desktop View: separate controls layout */}
-                <div className="hidden md:flex items-center justify-between w-full">
-                  {/* Category Tabs */}
-                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
-                    {[
-                      { label: "All Media", value: "ALL" },
-                      { label: "Anime", value: "ANIME" },
-                      { label: "Manga", value: "MANGA" },
-                      { label: "Series", value: "TV_SHOW" },
-                      { label: "Movies", value: "MOVIE" }
-                    ].map((tab) => (
-                      <button
-                        key={tab.value}
-                        onClick={() => setActiveTab(tab.value as any)}
-                        className={`flex-shrink-0 text-center px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${activeTab === tab.value
-                          ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20"
-                          : "text-slate-400 hover:text-slate-200 hover:bg-[#1f212a]/50"
-                          }`}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Status tabs + Matches indicator */}
-                  <div className="flex items-center gap-3">
-                    <div className="flex gap-1 bg-[#050608] p-1 rounded-xl border border-[#1f212a]/60">
-                      {[
-                        { label: "All Statuses", value: "ALL" },
-                        { label: "Ongoing", value: "ONGOING" },
-                        { label: "Completed", value: "COMPLETED" }
-                      ].map((tab) => (
-                        <button
-                          key={tab.value}
-                          onClick={() => setStatusFilter(tab.value as any)}
-                          className={`px-3.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${statusFilter === tab.value
-                            ? "bg-[#ff2e43] text-white shadow-md shadow-[#ff2e43]/15"
-                            : "text-slate-400 hover:text-slate-200"
-                            }`}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <span className="text-[9px] text-[#ff2e43] font-bold bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3.5 py-1.5 rounded-xl uppercase tracking-widest whitespace-nowrap">
-                      {filteredMedia.length} Match{filteredMedia.length !== 1 ? "es" : ""}
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-            );
-          })()}
-
-          {/* DYNAMIC LIST LEDGER CONTAINER (Trakt vertical cards poster grid) */}
-          {isLoadingWatchlist ? (
-            renderLoader(false)
-          ) : filteredMedia.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-in fade-in duration-300">
-              {filteredMedia.map((item) => {
-                const percent = Math.round((item.currentProgress / item.totalProgress) * 100);
-                const isCompleted = item.currentProgress === item.totalProgress;
-                const isEditingThis = editingId === item.id;
-
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => {
-                      setSelectedDetailsItem(item);
-                      setCustomValue(item.currentProgress.toString());
-                    }}
-                    className={`group relative bg-[#0f1015] border rounded-2xl overflow-hidden transition-all duration-300 flex flex-col shadow-md hover:translate-y-[-4px] cursor-pointer ${isCompleted
-                      ? "border-emerald-500/20 hover:border-emerald-500/40 hover:shadow-emerald-500/5"
-                      : "border-[#1f212a] hover:border-[#ff2e43]/30 hover:shadow-[#ff2e43]/5"
-                      }`}
-                  >
-
-                    {/* Media Thumbnail Poster Container (aspect 2/3) */}
-                    <div className="relative aspect-[3/4] w-full bg-slate-900 overflow-hidden border-b border-[#1f212a] flex-shrink-0">
-                      <img
-                        src={item.coverImage}
-                        alt={item.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-
-                      {/* Gradient overlay for contrast */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/30 opacity-80" />
-
-                      {/* Media Category Badge overlay */}
-                      <span className={`absolute top-3 left-3 text-[8px] font-extrabold px-2 py-0.5 rounded-md border uppercase tracking-wider ${item.type === "ANIME"
-                        ? "bg-black/80 border-[#1f212a] text-[#ff2e43]"
-                        : item.type === "MANGA"
-                          ? "bg-black/80 border-[#1f212a] text-emerald-400"
-                          : item.type === "TV_SHOW"
-                            ? "bg-black/80 border-[#1f212a] text-indigo-400"
-                            : "bg-black/80 border-[#1f212a] text-fuchsia-400"
-                        }`}>
-                        {item.type}
-                      </span>
-
-                      {/* Percent Pill Overlay */}
-                      <span className={`absolute top-3 right-3 text-[9px] font-bold px-2 py-0.5 rounded-md ${isCompleted
-                        ? "bg-emerald-950/80 text-emerald-400 border border-emerald-500/30"
-                        : "bg-[#ff2e43]/15 text-[#ff2e43] border border-[#ff2e43]/20"
-                        }`}>
-                        {percent}%
-                      </span>
-
-                      {/* Airing Calendar indicator countdown on poster */}
-                      {item.nextAiringEpisode && !isCompleted && (
-                        <div className="absolute bottom-3 left-3 right-3 p-1.5 rounded-lg bg-black/85 border border-[#1f212a] text-[8px] font-bold text-slate-300 flex items-center gap-1">
-                          <Tv className="w-2.5 h-2.5 text-[#ff2e43]" />
-                          <span className="truncate">Ep {item.nextAiringEpisode.episode} in {Math.ceil(item.nextAiringEpisode.timeUntilAiring / 3600 / 24)} days</span>
-                        </div>
-                      )}
-
-                      {/* Floating incremental Quick Log button on poster hover */}
-                      {!isCompleted && (
-                        <button
-                          onClick={(e) => handleIncrement(item.id, e)}
-                          disabled={item.id.startsWith("temp-")}
-                          className={`absolute bottom-3 right-3 w-10 h-10 rounded-full bg-[#ff2e43] text-white flex items-center justify-center shadow-lg active:scale-90 hover:scale-105 hover:bg-[#e02034] transition-all duration-200 ${item.id.startsWith("temp-") ? "opacity-50 cursor-wait" : ""}`}
-                          title={item.id.startsWith("temp-") ? "Saving..." : `Log +1 ${item.progressType}`}
-                        >
-                          <Plus className="w-5 h-5" />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Media Details */}
-                    <div className="p-4 flex-1 flex flex-col justify-between">
-                      <div>
-                        {/* Franchise name */}
-                        <p className="text-[8px] text-slate-550 font-bold uppercase tracking-wider truncate">
-                          {item.franchise}
-                        </p>
-
-                        {/* Title */}
-                        <h3 className="text-xs sm:text-sm font-bold text-slate-205 mt-1.5 line-clamp-1 group-hover:text-[#ff2e43] transition-colors" title={item.title}>
-                          {item.title}
-                        </h3>
-
-                        {/* Sync source details if present */}
-                        {item.sourceMaterialProgress && (
-                          <div className="mt-2 p-2 bg-[#050608] border border-[#1f212a] rounded-lg text-[9px] space-y-1">
-                            <div className="flex items-center justify-between text-slate-400 font-semibold">
-                              <span className="flex items-center gap-1 text-[8px] uppercase">
-                                <BookOpen className="w-3 h-3 text-emerald-400" />
-                                Manga Source
-                              </span>
-                              <span className="text-slate-300 font-bold">Ch. {item.sourceMaterialProgress.current}/{item.sourceMaterialProgress.total}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[8px] text-indigo-400 font-semibold">
-                              <span>Ingested Sync Gap</span>
-                              <span>{item.sourceMaterialProgress.current - item.currentProgress * 20} chs ahead</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Tracker Progress Controls */}
-                      <div className="space-y-3 mt-4 pt-3 border-t border-[#1f212a]/50">
-                        <div className="flex justify-between items-center text-xs">
-                          {/* Inline manual editor */}
-                          {isEditingThis ? (
-                            <div className="flex items-center gap-1 w-full justify-between" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max={item.totalProgress}
-                                  placeholder={item.currentProgress.toString()}
-                                  value={customValue}
-                                  onChange={(e) => setCustomValue(e.target.value)}
-                                  className="w-14 bg-[#050608] border border-[#1f212a] rounded px-1.5 py-0.5 text-base md:text-xs text-center focus:outline-none focus:border-[#ff2e43] text-[#ff2e43] font-bold"
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") handleSaveCustomProgress(item.id, item.totalProgress, item.progressType);
-                                    if (e.key === "Escape") setEditingId(null);
-                                  }}
-                                />
-                                <button
-                                  onClick={() => handleSaveCustomProgress(item.id, item.totalProgress, item.progressType)}
-                                  className="p-1 bg-[#ff2e43] text-white rounded hover:bg-[#e02034] transition-all"
-                                >
-                                  <Check className="w-3 h-3" />
-                                </button>
-                                <button
-                                  onClick={() => setEditingId(null)}
-                                  className="p-1 bg-[#1f212a] text-slate-400 rounded hover:bg-[#2b2e3b] transition-all"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center">
-                              <span>Logged: <strong className="text-slate-100 font-bold">{item.currentProgress}</strong>/{item.totalProgress}</span>
-
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingId(item.id);
-                                  setCustomValue(item.currentProgress.toString());
-                                }}
-                                className="ml-1.5 p-1 text-slate-500 hover:text-[#ff2e43] rounded transition-colors"
-                                title="Edit count manually"
-                              >
-                                <Edit2 className="w-2.5 h-2.5" />
-                              </button>
-                            </span>
-                          )}
-
-                          <span className="text-[9px] text-slate-500 font-medium">Updated {item.lastUpdated}</span>
-                        </div>
-
-                        {/* Thin Progress bar */}
-                        <div className="h-1 w-full bg-[#050608] rounded-full overflow-hidden">
-                          <div
-                            style={{ width: `${percent}%` }}
-                            className={`h-full rounded-full transition-all duration-500 ${isCompleted
-                              ? "bg-emerald-500"
-                              : "bg-[#ff2e43]"
-                              }`}
-                          />
-                        </div>
-
-                        {/* Action Buttons grid */}
-                        <div className="flex gap-2">
-                          <button
-                            disabled={isCompleted || item.id.startsWith("temp-")}
-                            onClick={(e) => handleCatchUp(item.id, e)}
-                            className={`flex-1 py-1.5 rounded-lg text-[9px] uppercase tracking-wider font-extrabold transition-all flex items-center justify-center gap-1 min-h-[30px] ${isCompleted || item.id.startsWith("temp-")
-                              ? "bg-[#050608] border border-[#1f212a] text-slate-500 cursor-not-allowed"
-                              : "bg-[#1f212a] hover:bg-[#2b2e3b] text-slate-355 hover:text-white"
-                              }`}
-                          >
-                            {isCompleted ? (
-                              <>
-                                <CheckCircle className="w-3 h-3 text-emerald-500" />
-                                Watched
-                              </>
-                            ) : (
-                              <>
-                                <Bookmark className="w-3 h-3" />
-                                Catch Up
-                              </>
-                            )}
-                          </button>
-
-                          <button
-                            onClick={(e) => handleReset(item.id, e)}
-                            disabled={item.id.startsWith("temp-")}
-                            title="Reset tracking count to 0"
-                            className={`p-1.5 bg-[#050608] border border-[#1f212a] hover:border-red-950 text-slate-500 hover:text-[#ff2e43] rounded-lg transition-all min-h-[30px] flex items-center justify-center ${item.id.startsWith("temp-") ? "opacity-50 cursor-wait" : ""}`}
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : mediaList.length === 0 ? (
-            <div className="bg-[#0f1015] border border-[#1f212a] rounded-3xl p-8 sm:p-16 text-center flex flex-col items-center justify-center gap-5">
-              <Sparkles className="w-12 h-12 text-[#ff2e43] animate-pulse" />
-              <div>
-                <h3 className="text-base font-bold text-slate-200">Your Watchlist is Empty!</h3>
-                <p className="text-xs text-slate-500 mt-1.5 max-w-xs mx-auto leading-relaxed">
-                  Start tracking by adding your favorite Anime, Manga, TV Series, or Movies. Click below to start! (o^▽^o)
-                </p>
-              </div>
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="px-5 py-3 bg-[#ff2e43] hover:bg-[#e02034] text-white text-xs font-bold rounded-xl transition-all shadow-lg flex items-center gap-1.5 min-h-[44px]"
-              >
-                <Plus className="w-4 h-4" />
-                Add Your First Media
-              </button>
-            </div>
-          ) : (
-            <div className="bg-[#0f1015] border border-[#1f212a] rounded-3xl p-8 sm:p-16 text-center flex flex-col items-center justify-center gap-4">
-              <Search className="w-12 h-12 text-[#1f212a]" />
-              <div>
-                <h3 className="text-base font-bold text-slate-300">No media cards found matching search</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto px-4">
-                  "{searchQuery}" was not found in your watchlist. Would you like to search online API lists?
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setModalSearchQuery(searchQuery);
-                  setIsModalOpen(true);
-                }}
-                className="px-5 py-3 bg-[#ff2e43] hover:bg-[#e02034] text-white text-xs font-bold rounded-xl transition-all shadow-lg flex items-center gap-1.5 min-h-[44px]"
-              >
-                <Plus className="w-4 h-4" />
-                Search Online Index
-              </button>
-            </div>
-          )}
-
-        </section>
-
-        {/* ========================================================================= */}
-        {/* MOBILE-ONLY UX SCREENS                                                    */}
-        {/* ========================================================================= */}
-
-        {/* Airing Calendar Timeline Screen */}
-        <div className={`col-span-full flex flex-col gap-5 w-full max-w-4xl mx-auto pb-28 ${mobileActiveTab === "CALENDAR" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
-          <div className="flex items-center justify-between border-b border-[#1f212a] pb-3">
-            <div>
-              <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
-                <Tv className="w-4 h-4 text-[#ff2e43]" />
-                Airing Calendar
-              </h2>
-              <p className="text-[9px] text-slate-550 mt-0.5 font-medium">Watchlist schedules synced dynamically</p>
-            </div>
-            <span className="text-[8px] bg-[#ff2e43]/10 border border-[#ff2e43]/20 text-[#ff2e43] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest">Local / JST</span>
+        {/* Mobile / Screen Tab Views */}
+        {mobileActiveTab === "CALENDAR" && (
+          <div className="col-span-full">
+            <AiringCalendarView airingCalendar={airingCalendar} mediaList={mediaList} isMobileView />
           </div>
+        )}
 
-          {airingCalendar.length > 0 ? (
-            <div className="space-y-4">
-              {airingCalendar.map((entry) => (
-                <div key={entry.id} className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-4 flex gap-4 items-start shadow-md">
-                  <div className="flex-shrink-0 w-12 h-18 bg-slate-900 rounded-lg overflow-hidden border border-[#1f212a]">
-                    <img src={mediaList.find(m => m.id === entry.id)?.coverImage} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start gap-1">
-                      <h4 className="text-xs font-bold text-slate-200 line-clamp-1">{entry.title}</h4>
-                      <span className="text-[8px] font-extrabold uppercase px-2 py-0.5 bg-[#ff2e43]/10 border border-[#ff2e43]/20 text-[#ff2e43] rounded-md flex-shrink-0">
-                        {entry.schedule.timeLabel}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5 mt-3">
-                      <Clock className="w-3.5 h-3.5 text-[#ff2e43] flex-shrink-0" />
-                      {entry.schedule.details}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 bg-[#0f1015]/40 border border-dashed border-[#1f212a] rounded-3xl flex flex-col items-center gap-2">
-              <Clock className="w-8 h-8 text-slate-700 animate-pulse" />
-              <p className="text-xs font-bold text-slate-400 px-4">No ongoing watchlist items</p>
-              <p className="text-[9px] text-slate-600 px-6 max-w-xs leading-normal">
-                Add an ongoing Anime or Manga series from the Discover catalog to populate live airing alerts.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Discover API Add Screen (Instant search on mobile) */}
-        <div className={`col-span-full flex flex-col gap-5 w-full max-w-4xl mx-auto pb-28 ${mobileActiveTab === "DISCOVER" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
-          <div className="border-b border-[#1f212a] pb-3">
-            <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
-              <Search className="w-4 h-4 text-[#ff2e43]" />
-              Discover Media
-            </h2>
-            <p className="text-[9px] text-slate-550 mt-0.5 font-medium">Sync directly with AniList and TMDB APIs</p>
+        {mobileActiveTab === "DISCOVER" && (
+          <div className="col-span-full">
+            <DiscoverView mediaList={mediaList} onAddMedia={handleAddMedia} />
           </div>
+        )}
 
-          {/* Search Controls */}
-          <div className="flex flex-col gap-3 p-4 bg-[#0f1015] border border-[#1f212a] rounded-2xl">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-450" />
-              <input
-                type="text"
-                placeholder="Search series or novels..."
-                value={modalSearchQuery}
-                onChange={(e) => setModalSearchQuery(e.target.value)}
-                className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl pl-9 pr-3.5 py-3 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-              />
-            </div>
-
-            <select
-              value={selectedMediaType}
-              onChange={(e) => setSelectedMediaType(e.target.value as any)}
-              className="w-full bg-[#050608] border border-[#1f212a] text-base md:text-xs rounded-xl px-3 py-2.5 text-slate-355 font-bold"
-            >
-              <option value="ALL">All Categories</option>
-              <option value="ANIME">Anime</option>
-              <option value="MANGA">Manga</option>
-              <option value="TV_SHOW">Series</option>
-              <option value="MOVIE">Movies</option>
-            </select>
+        {mobileActiveTab === "RELEASES" && (
+          <div className="col-span-full">
+            <ReleasesView mediaList={mediaList} onAddMedia={handleAddMedia} mobileActiveTab={mobileActiveTab} />
           </div>
+        )}
 
-          {/* Search Results Ledger */}
-          <div className="space-y-3">
-            {isLoadingSearch ? (
-              <div className="text-center py-16 text-[#ff2e43] flex flex-col items-center justify-center gap-2.5">
-                <div className="w-6 h-6 border-4 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
-                <p className="text-[9px] font-bold text-slate-400">Querying live APIs...</p>
-              </div>
-            ) : searchResults.length > 0 ? (
-              searchResults.map((result) => (
-                <div
-                  key={`mobile-search-${result.id}`}
-                  className="flex gap-3.5 p-3.5 bg-[#0f1015] border border-[#1f212a] rounded-2xl items-center"
-                >
-                  <div className="w-12 h-18 bg-slate-900 rounded-lg overflow-hidden flex-shrink-0 border border-[#1f212a]/50">
-                    <img src={result.coverImage} alt={result.title} className="w-full h-full object-cover" />
-                  </div>
-
-                  <div className="flex-1 min-w-0 flex flex-col justify-between h-18 py-0.5">
-                    <div>
-                      <div className="flex justify-between items-start gap-1">
-                        <h4 className="text-[10px] font-bold text-slate-200 line-clamp-1">{result.title}</h4>
-                        <span className="text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#ff2e43]/15 border border-[#ff2e43]/20 text-[#ff2e43] rounded-full flex-shrink-0">{result.type}</span>
-                      </div>
-                      <p className="text-[8px] text-slate-550 font-bold uppercase tracking-wider mt-0.5 truncate">{result.franchise}</p>
-                    </div>
-
-                    <div className="flex justify-between items-center mt-auto pt-1 border-t border-[#1f212a]/30">
-                      <span className="text-[8px] text-slate-400 font-medium">{result.totalProgress} {result.progressType}s</span>
-                      {mediaList.some((item) => item.title.toLowerCase() === result.title.toLowerCase() && item.type === result.type) ? (
-                        <div className="py-1 px-3 bg-emerald-955/20 border border-emerald-500/30 text-emerald-450 rounded-lg text-[9px] font-bold flex items-center gap-1 cursor-default">
-                          <Check className="w-3 h-3 text-emerald-450" />
-                          Added
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleAddMedia(result)}
-                          className="py-1 px-3 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-lg text-[9px] font-bold transition-all flex items-center gap-1 active:scale-95 shadow-md"
-                        >
-                          <Plus className="w-3 h-3" />
-                          Track
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-12 text-slate-500 flex flex-col items-center gap-2">
-                <Search className="w-7 h-7 text-slate-700 animate-pulse" />
-                <p className="text-xs font-semibold text-slate-400">Search online catalogs</p>
-                <p className="text-[9px] text-slate-600 leading-normal px-8">
-                  Query databases dynamically. Simply type show, manga, or movie title above.
-                </p>
-              </div>
-            )}
+        {mobileActiveTab === "STATS" && (
+          <div className="col-span-full">
+            <AnalyticsStats
+              mediaList={mediaList}
+              user={user}
+              isMobileView
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              isInstallable={isInstallable}
+              onInstallClick={handleInstallClick}
+              onOpenTheme={() => setIsThemeOpen(true)}
+              onOpenChangePassword={() => setIsChangePasswordOpen(true)}
+              onOpenImportExport={() => setIsImportExportOpen(true)}
+              onLogout={handleLogout}
+            />
           </div>
-        </div>
+        )}
 
-        {/* New Releases Screen */}
-        <div className={`col-span-full flex flex-col gap-5 w-full max-w-5xl mx-auto pb-28 ${mobileActiveTab === "RELEASES" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#1f212a] pb-4">
-            <div>
-              <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
-                <Sparkles className="w-4 h-4 text-[#ff2e43] fill-[#ff2e43]" />
-                New Releases
-              </h2>
-              <p className="text-[9px] text-slate-550 mt-0.5 font-medium">Live feeds of upcoming and newly released titles</p>
-            </div>
-
-            {/* Search Input & Timeframe selector wrapper */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
-              {/* Search input for releases */}
-              <div className="relative w-full sm:w-60">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Search new releases..."
-                  value={releaseSearchQuery}
-                  onChange={(e) => setReleaseSearchQuery(e.target.value)}
-                  className="w-full bg-[#0f1015] border border-[#1f212a] text-xs rounded-xl pl-9 pr-3.5 py-2 text-[#f3f4f6] placeholder-slate-500 focus:outline-none focus:border-[#ff2e43]/50 transition-all font-semibold"
-                />
-                {releaseSearchQuery && (
-                  <button
-                    onClick={() => setReleaseSearchQuery("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 text-[10px] font-bold"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-
-              {/* Timeframe selector (Weekly/Monthly) */}
-              {selectedReleaseCategory !== "MOVIE" ? (
-                <div className="flex bg-[#0f1015] border border-[#1f212a] p-1 rounded-xl gap-1 justify-center sm:justify-start">
-                  {[
-                    { label: "Weekly", value: "weekly" as const },
-                    { label: "Monthly", value: "monthly" as const }
-                  ].map((tf) => (
-                    <button
-                      key={tf.value}
-                      onClick={() => setReleasesTimeframe(tf.value)}
-                      className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${releasesTimeframe === tf.value
-                        ? "bg-[#ff2e43] text-white shadow-md shadow-[#ff2e43]/15"
-                        : "text-slate-400 hover:text-slate-200"
-                        }`}
-                    >
-                      {tf.label}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-[#ff2e43]/10 border border-[#ff2e43]/20 px-3.5 py-1.5 rounded-xl text-center sm:text-left">
-                  <span className="text-[9px] text-[#ff2e43] font-bold uppercase tracking-widest">Monthly Releases Feed</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Release Category Filter Controls */}
-          <div className="flex gap-1 overflow-x-auto no-scrollbar scroll-smooth">
-            {[
-              { label: "All Releases", value: "ALL" as const },
-              { label: "Anime", value: "ANIME" as const },
-              { label: "Series", value: "TV_SHOW" as const },
-              { label: "Movies", value: "MOVIE" as const }
-            ].map((cat) => (
-              <button
-                key={cat.value}
-                onClick={() => {
-                  setSelectedReleaseCategory(cat.value);
-                  if (cat.value === "MOVIE") {
-                    setReleasesTimeframe("monthly");
-                  }
-                }}
-                className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap ${selectedReleaseCategory === cat.value
-                  ? "bg-[#ff2e43] text-white shadow-lg shadow-[#ff2e43]/20"
-                  : "bg-[#0f1015] border border-[#1f212a] text-slate-400 hover:bg-[#1f212a]/50 hover:text-slate-200"
-                  }`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {isLoadingReleases ? (
-            <div className="text-center py-20 text-[#ff2e43] flex flex-col items-center justify-center gap-2.5">
-              <div className="w-8 h-8 border-4 border-[#ff2e43] border-t-transparent rounded-full animate-spin" />
-              <p className="text-[10px] font-bold text-slate-450">Scanning live release feeds...</p>
-            </div>
-          ) : displayedReleases.length === 0 ? (
-            <div className="text-center py-16 text-slate-500 flex flex-col items-center gap-2 bg-[#0f1015]/40 border border-dashed border-[#1f212a] rounded-3xl w-full">
-              {releaseSearchQuery.trim() ? (
-                <Search className="w-8 h-8 text-slate-700 animate-pulse" />
-              ) : (
-                <Sparkles className="w-8 h-8 text-slate-700 animate-pulse" />
-              )}
-              <p className="text-xs font-semibold text-slate-400">
-                {releaseSearchQuery.trim() ? "No matching releases found" : "No releases found"}
-              </p>
-              <p className="text-[9px] text-slate-600 leading-normal max-w-xs px-8">
-                {releaseSearchQuery.trim()
-                  ? "Try refining your search term or selecting a different category."
-                  : "No newly scheduled titles returned in this range. Try shifting the timeframe to Monthly."}
-              </p>
-            </div>
-          ) : (
-            <div className="max-h-[650px] overflow-y-auto pr-1">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-200">
-                {displayedReleases.map((item: any) => {
-                  const alreadyAdded = mediaList.some(
-                    (m) => m.title.toLowerCase() === item.title.toLowerCase() && m.type === item.type
-                  );
-
-                  return (
-                    <div
-                      key={`release-${item.id}`}
-                      className="group bg-[#0f1015]/80 backdrop-blur-sm border border-[#1f212a] rounded-2xl p-3 sm:p-4 flex gap-4 hover:border-[#ff2e43]/30 hover:bg-[#121319] transition-all duration-300 shadow-lg relative"
-                    >
-                      {/* Poster Image */}
-                      <div className="relative aspect-[2/3] w-20 sm:w-24 bg-slate-900 rounded-xl overflow-hidden flex-shrink-0 border border-[#1f212a]/50">
-                        <img
-                          src={item.coverImage}
-                          alt={item.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                        <div className="absolute top-1.5 left-1.5 flex flex-col gap-1">
-                          <span className="text-[7px] font-extrabold uppercase tracking-widest px-1.5 py-0.5 bg-[#ff2e43] text-white rounded-md shadow-md">
-                            {item.type}
-                          </span>
-                          {item.episode && (
-                            <span className="text-[7px] font-extrabold uppercase tracking-widest px-1.5 py-0.5 bg-indigo-600 text-white rounded-md shadow-md">
-                              Ep {item.episode}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Metadata & Actions */}
-                      <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
-                        <div>
-                          <div className="flex justify-between items-start gap-2">
-                            <h4 className="text-xs sm:text-sm font-black text-slate-200 line-clamp-1 group-hover:text-[#ff2e43] transition-colors" title={item.title}>
-                              {item.title}
-                            </h4>
-                            {item.rating > 0 && (
-                              <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-500/90 text-[#0f1015] rounded-md shadow-md text-[8px] font-black flex-shrink-0">
-                                <Star className="w-2.5 h-2.5 fill-[#0f1015]" />
-                                {item.rating.toFixed(1)}
-                              </div>
-                            )}
-                          </div>
-
-                          <p className="text-[8px] text-[#ff2e43]/85 font-extrabold uppercase tracking-widest mt-1 flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-[#ff2e43]" />
-                            {item.releaseDate ? `${new Date(item.releaseDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Date TBD'}
-                          </p>
-
-                          <p className="text-[10px] sm:text-xs text-slate-400 line-clamp-2 sm:line-clamp-3 mt-2 leading-relaxed font-medium">
-                            {item.synopsis}
-                          </p>
-                        </div>
-
-                        <div className="pt-3 border-t border-[#1f212a]/50 mt-3 flex justify-end">
-                          {alreadyAdded ? (
-                            <div className="px-4 py-1.5 bg-emerald-955/20 border border-emerald-500/30 text-emerald-450 rounded-xl text-[9px] font-bold flex items-center gap-1 cursor-default">
-                              <Check className="w-3.5 h-3.5" />
-                              Tracked
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => handleAddMedia(item)}
-                              className="px-4 py-1.5 bg-[#ff2e43] hover:bg-[#e02034] text-white rounded-xl text-[9px] font-bold transition-all flex items-center gap-1 active:scale-95 shadow-md shadow-[#ff2e43]/15"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              Track Media
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-        </div>
-
-        {/* Mobile Settings, Analytics & Sync state */}
-        <div className={`col-span-full flex flex-col gap-5 w-full max-w-5xl mx-auto pb-28 ${mobileActiveTab === "STATS" ? "flex animate-in fade-in duration-200" : "hidden"}`}>
-          <div className="border-b border-[#1f212a] pb-3">
-            <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
-              <Activity className="w-4 h-4 text-[#ff2e43]" />
-              Ledger Metrics
-            </h2>
-            <p className="text-[9px] text-slate-550 mt-0.5 font-medium">Watchlist profiles, sync clusters and logs</p>
-          </div>
-
-          {/* User profile segment */}
-          <div className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#1f212a] flex items-center justify-center text-slate-300">
-                <User className="w-5 h-5 text-[#ff2e43]" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-slate-205">{user?.username}</h4>
-                <p className="text-[9px] text-slate-550 font-bold uppercase tracking-wider mt-0.5">{user?.email}</p>
-              </div>
-            </div>
-            <span className="text-[8px] bg-indigo-950 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full font-bold uppercase">Active Watcher</span>
-          </div>
-
-          {/* Watch & Read Analytics Card */}
-          <div className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-4">
-            <div className="flex items-center gap-2 text-slate-350 mb-4.5">
-              <TrendingUp className="w-4 h-4 text-[#ff2e43]" />
-              <h4 className="text-xs font-extrabold uppercase tracking-wider">Dashboard Analytics</h4>
-            </div>
-            <div className="grid grid-cols-3 gap-2.5 mb-3">
-              <div className="bg-[#050608] border border-[#1f212a] p-3 rounded-xl text-center">
-                <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Watched</p>
-                <p className="text-base font-black text-slate-200 mt-0.5">{totalWatchHours}h</p>
-              </div>
-              <div className="bg-[#050608] border border-[#1f212a] p-3 rounded-xl text-center">
-                <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Read</p>
-                <p className="text-base font-black text-slate-200 mt-0.5">{totalReadHours}h</p>
-              </div>
-              <div className="bg-[#050608] border border-[#1f212a] p-3 rounded-xl text-center">
-                <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Completed</p>
-                <p className="text-base font-black text-emerald-400 mt-0.5">{completedCount}</p>
-              </div>
-            </div>
-            <div className="bg-[#050608] border border-[#1f212a] p-3 rounded-xl flex items-center justify-between text-xs font-semibold">
-              <span className="text-slate-500">Total Tracking Invested</span>
-              <span className="font-extrabold text-[#ff2e43]">{(totalWatchHours + totalReadHours).toFixed(1)} Hours</span>
-            </div>
-          </div>
-
-          {/* Mobile Settings */}
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="w-full py-3.5 bg-[#0f1015] hover:bg-[#1f212a] border border-[#1f212a] text-xs font-extrabold rounded-xl text-slate-300 transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
-          >
-            <Puzzle className="w-4 h-4" />
-            Extension Management
-          </button>
-
-          {isInstallable && (
-            <button
-              onClick={handleInstallClick}
-              className="w-full py-3.5 bg-[#ff2e43]/10 hover:bg-[#ff2e43]/20 border border-[#ff2e43]/30 text-xs font-extrabold rounded-xl text-[#ff2e43] transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
-            >
-              <Smartphone className="w-4 h-4" />
-              Install BingeLog App
-            </button>
-          )}
-
-          <button
-            onClick={() => setIsThemeOpen(true)}
-            className="w-full py-3.5 bg-[#0f1015] hover:bg-[#1f212a] border border-[#1f212a] text-xs font-extrabold rounded-xl text-slate-300 transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
-          >
-            <Palette className="w-4 h-4" />
-            Theme Customization
-          </button>
-
-          <button
-            onClick={() => setIsChangePasswordOpen(true)}
-            className="w-full py-3.5 bg-[#0f1015] hover:bg-[#1f212a] border border-[#1f212a] text-xs font-extrabold rounded-xl text-slate-300 transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
-          >
-            <Key className="w-4 h-4" />
-            Change Password
-          </button>
-
-          <button
-            onClick={() => setIsImportExportOpen(true)}
-            className="w-full py-3.5 bg-[#0f1015] hover:bg-[#1f212a] border border-[#1f212a] text-xs font-extrabold rounded-xl text-slate-300 transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
-          >
-            <Database className="w-4 h-4" />
-            Import / Export Watchlist
-          </button>
-
-          {/* Mobile Sign Out */}
-          <button
-            onClick={handleLogout}
-            className="w-full py-3.5 bg-red-950/20 hover:bg-[#ff2e43]/10 border border-[#ff2e43]/20 text-xs font-extrabold rounded-xl text-[#ff2e43] transition-all flex items-center justify-center gap-2 active:scale-95 mt-2"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out of Account
-          </button>
-
-        </div>
-
-        {/* ========================================================================= */}
-        {/* 3. SIDE PANEL DESKTOP METRICS (Order-2: Sidebar)                         */}
-        {/* ========================================================================= */}
-        <aside className={`hidden lg:flex lg:col-span-1 flex-col gap-6 order-2 lg:order-1 ${mobileActiveTab === "LIST" ? "lg:flex" : "lg:hidden"}`}>
-
-          {/* Watch & Read Analytics Card */}
-          <div className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-slate-300 mb-4">
-              <TrendingUp className="w-4 h-4 text-[#ff2e43]" />
-              <h2 className="text-xs font-bold uppercase tracking-wider">Ledger Analytics</h2>
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div className="bg-[#050608] border border-[#1f212a] p-3.5 rounded-xl text-center">
-                <p className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wider">Watch Time</p>
-                <p className="text-lg font-black text-slate-205 mt-1">{totalWatchHours}h</p>
-              </div>
-              <div className="bg-[#050608] border border-[#1f212a] p-3.5 rounded-xl text-center">
-                <p className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wider">Read Time</p>
-                <p className="text-lg font-black text-slate-205 mt-1">{totalReadHours}h</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div className="col-span-2 bg-[#050608] border border-[#1f212a] p-3 rounded-xl flex items-center justify-between text-xs font-semibold">
-                <span className="text-slate-500">Completed Entries</span>
-                <span className="font-extrabold text-emerald-400">{completedCount} titles</span>
-              </div>
-            </div>
-            <div className="bg-[#050608] border border-[#1f212a] p-3 rounded-xl flex items-center justify-between text-xs font-semibold">
-              <span className="text-slate-500">Total Tracking Invested</span>
-              <span className="font-extrabold text-[#ff2e43]">{(totalWatchHours + totalReadHours).toFixed(1)} hrs</span>
-            </div>
-          </div>
-
-          {/* Airing Schedule Calendar (Personalized Watchlist-Bound Calendar) */}
-          <div className="bg-[#0f1015] border border-[#1f212a] rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2 text-[#ff2e43]">
-                <Tv className="w-5 h-5" />
-                <h2 className="text-xs font-bold uppercase tracking-wider">Airing Calendar</h2>
-              </div>
-              <span className="text-[9px] bg-[#ff2e43]/10 border border-[#ff2e43]/20 text-[#ff2e43] px-2.5 py-0.5 rounded-full font-bold uppercase">JST / Local</span>
-            </div>
-
-            {airingCalendar.length > 0 ? (
-              <div className="space-y-4 animate-in fade-in duration-200">
-                {airingCalendar.map((entry) => (
-                  <div key={`desktop-calendar-${entry.id}`} className="flex gap-3 border-l-2 border-[#ff2e43]/40 pl-3">
-                    <div className="text-[9px] font-black text-[#ff2e43] min-w-[55px] uppercase tracking-wide mt-0.5">
-                      {entry.schedule.timeLabel}
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-200 line-clamp-1">{entry.title}</h4>
-                      <p className="text-[9px] text-slate-450 font-semibold flex items-center gap-1 mt-1 leading-relaxed">
-                        <Clock className="w-3.5 h-3.5 text-[#ff2e43] flex-shrink-0" /> {entry.schedule.details}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-slate-500 border border-dashed border-[#1f212a] rounded-2xl flex flex-col items-center gap-2">
-                <Clock className="w-6 h-6 text-[#1f212a] animate-pulse" />
-                <p className="text-[10px] font-bold text-slate-450 leading-normal px-4">
-                  No releasing media on watchlist
-                </p>
-                <p className="text-[9px] text-slate-600 px-4">
-                  Add ongoing anime or TV shows from Discover to sync release countdowns.
-                </p>
-              </div>
-            )}
-          </div>
-
-
-
-        </aside>
-
+        {/* Desktop Sidebar (LIST View) */}
+        {mobileActiveTab === "LIST" && (
+          <aside className="hidden lg:flex lg:col-span-1 flex-col gap-6 order-2 lg:order-1">
+            <AnalyticsStats mediaList={mediaList} user={user} />
+            <AiringCalendarView airingCalendar={airingCalendar} mediaList={mediaList} />
+          </aside>
+        )}
       </main>
 
-
-
       {/* Mobile Docked Bottom Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0f1015] border-t border-[#1f212a] px-3 pt-2 pb-[calc(10px+env(safe-area-inset-bottom,0px))] grid grid-cols-5 shadow-2xl items-center rounded-t-2xl">
-        {[
-          { id: "LIST", label: "Ledger", icon: BookOpen },
-          { id: "CALENDAR", label: "Airing", icon: Tv },
-          { id: "DISCOVER", label: "Discover", icon: Search },
-          { id: "RELEASES", label: "Releases", icon: Sparkles },
-          { id: "STATS", label: "Stats", icon: Layers }
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = mobileActiveTab === tab.id;
-          const isAiring = tab.id === "CALENDAR";
-          return (
-            <button
-              key={`bottom-nav-${tab.id}`}
-              onClick={() => setMobileActiveTab(tab.id as any)}
-              className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all relative ${isActive ? "text-[#ff2e43] font-bold" : "text-slate-500 hover:text-slate-300"
-                }`}
-            >
-              <Icon className={`${isAiring ? "w-3.5 h-3.5" : "w-4 h-4"} flex-shrink-0 animate-in fade-in`} />
-              <span className="text-[8px] xs:text-[9px] mt-1 font-bold tracking-tight uppercase text-center block w-full truncate">{tab.label}</span>
-              {isActive && (
-                <span className="absolute bottom-0 w-3 h-0.5 bg-[#ff2e43] rounded-full" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
+      <MobileNav mobileActiveTab={mobileActiveTab} setMobileActiveTab={setMobileActiveTab} />
     </div>
   );
 }
