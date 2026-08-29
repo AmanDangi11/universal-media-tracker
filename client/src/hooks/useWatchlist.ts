@@ -15,19 +15,23 @@ export function useWatchlist(token: string | null, onLogout: () => void) {
     setTimeout(() => setShowNotification(false), 3000);
   };
 
-  const fetchWatchlist = useCallback(() => {
+  const fetchWatchlist = useCallback((showLoader = false) => {
     if (!token) {
       setIsLoadingWatchlist(false);
       return;
     }
-    setIsLoadingWatchlist(true);
+    // Keep existing loading state during background updates; do not re-trigger loading screen
+    if (!token) setIsLoadingWatchlist(false);
+    
     watchlistService
       .getWatchlist(token)
       .then(async (data) => {
         if (Array.isArray(data)) {
           setMediaList(data);
+          // Unblock loading indicator as soon as database items are rendered
+          setIsLoadingWatchlist(false);
 
-          // Fetch real-time airing schedules for ongoing anime/manga
+          // Fetch real-time airing schedules asynchronously in the background
           const ongoingAnimeOrManga = data.filter(
             (item) =>
               item.currentProgress < item.totalProgress &&
@@ -96,8 +100,9 @@ export function useWatchlist(token: string | null, onLogout: () => void) {
             );
             setMediaList(updatedItems);
           }
+        } else {
+          setIsLoadingWatchlist(false);
         }
-        setIsLoadingWatchlist(false);
       })
       .catch((err) => {
         if (err.message === "UNAUTHORIZED") {
@@ -110,8 +115,8 @@ export function useWatchlist(token: string | null, onLogout: () => void) {
   }, [token, onLogout]);
 
   useEffect(() => {
-    fetchWatchlist();
-    const handleFocus = () => fetchWatchlist();
+    fetchWatchlist(true);
+    const handleFocus = () => fetchWatchlist(false);
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
   }, [fetchWatchlist]);

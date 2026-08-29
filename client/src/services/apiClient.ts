@@ -21,6 +21,9 @@ export const getApiBaseUrl = (): string => {
     ) {
       return "https://ad35b38df0678b.lhr.life";
     }
+    if (window.location.hostname.endsWith(".onrender.com")) {
+      return "https://bingelog.onrender.com";
+    }
     return `http://${window.location.hostname}:5001`;
   }
   return "http://localhost:5001";
